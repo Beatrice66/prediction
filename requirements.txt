@@ -1,6 +1,9 @@
-
-# Example database connection code
-import sqlite3
-
-conn = sqlite3.connect('mydatabase.db')
-c = conn.cursor()
+streamlit==1.54.0
+scikit-learn==1.3.2
+pandas==2.3.3
+numpy==2.4.2
+matplotlib==3.8.0
+tensorflow-cpu==2.21.0
+sqlalchemy==2.1.0
+joblib==1.3.2
+pillow==12.1.1

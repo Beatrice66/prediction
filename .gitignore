@@ -1,9 +1,32 @@
+# Python cache files
 __pycache__/
-*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Virtual environment
 venv/
-ENV/
-.env
+.env/
+.venv/
+
+# System files
 .DS_Store
 Thumbs.db
+
+# Database files
+mydatabase.db
+
+# Model and data files (optional if large)
+*.keras
+*.h5
+*.pkl
+*.joblib
+
+# Streamlit cache
 .streamlit/
+
+# Logs
 *.log
