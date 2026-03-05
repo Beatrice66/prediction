@@ -8,6 +8,8 @@ def load_diabetes_model():
     model = load_model("diabetes_full_model.keras")
     return model
 
+load_model("models/diabetes_full_model.keras")
+
 model = load_diabetes_model()
 
 st.title("🩺 Diabetes Risk Prediction App")
@@ -75,3 +77,6 @@ if st.button("Predict Diabetes Risk"):
 
 st.markdown("---")
 st.caption("Disclaimer: This tool is for educational purposes and not a medical diagnosis.")
+
+scaler = joblib.load("models/scaler.pkl")
+encoder = load_model("models/encoder_model.keras")
