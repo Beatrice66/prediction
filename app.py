@@ -1,19 +1,21 @@
 import streamlit as st
 import numpy as np
 from tensorflow.keras.models import load_model
+import joblib  # if you later need scaler
 
-# Load model safely
+# -----------------------------
+# Load the model safely (cached)
+# -----------------------------
 @st.cache_resource
 def load_diabetes_model():
-    model = load_model("diabetes_full_model.keras")
-    return model
-
-load_model("models/diabetes_full_model.keras")
+    return load_model("models/diabetes_full_model.keras")
 
 model = load_diabetes_model()
 
+# -----------------------------
+# App Title & Description
+# -----------------------------
 st.title("🩺 Diabetes Risk Prediction App")
-
 st.write("""
 This application predicts the **risk of developing diabetes**
 based on lifestyle and health information.
@@ -21,31 +23,20 @@ based on lifestyle and health information.
 
 st.header("Enter Patient Health Information")
 
-# Numeric Inputs
+# -----------------------------
+# User Inputs
+# -----------------------------
+# Numeric inputs
 BMI = st.number_input("Body Mass Index (BMI)", min_value=10.0, max_value=60.0, step=0.1)
 Age = st.number_input("Age", min_value=1, max_value=120, step=1)
 
-# General Health Mapping
-health_options = {
-    "Excellent":1,
-    "Very Good":2,
-    "Good":3,
-    "Fair":4,
-    "Poor":5
-}
-
-GenHlth_label = st.selectbox(
-    "General Health Status",
-    list(health_options.keys())
-)
-
+# General Health Mapping (Excellent → Poor)
+health_options = {"Excellent":1, "Very Good":2, "Good":3, "Fair":4, "Poor":5}
+GenHlth_label = st.selectbox("General Health Status", list(health_options.keys()))
 GenHlth = health_options[GenHlth_label]
 
-# Physical Health Days
-PhysHlth = st.slider(
-    "Number of Days Physical Health Was Not Good (Last 30 Days)",
-    0, 30
-)
+# Physical Health
+PhysHlth = st.slider("Number of Days Physical Health Was Not Good (Last 30 Days)", 0, 30)
 
 # Yes/No Mapping
 yes_no = {"No":0, "Yes":1}
@@ -57,7 +48,9 @@ HeartDisease = yes_no[st.selectbox("Do you have a history of Heart Disease or He
 DiffWalk = yes_no[st.selectbox("Do you have Difficulty Walking or Climbing Stairs?", list(yes_no.keys()))]
 Smoker = yes_no[st.selectbox("Have you smoked at least 100 cigarettes in your lifetime?", list(yes_no.keys()))]
 
+# -----------------------------
 # Prediction
+# -----------------------------
 if st.button("Predict Diabetes Risk"):
 
     features = np.array([[BMI, Age, GenHlth, PhysHlth,
@@ -77,6 +70,3 @@ if st.button("Predict Diabetes Risk"):
 
 st.markdown("---")
 st.caption("Disclaimer: This tool is for educational purposes and not a medical diagnosis.")
-
-scaler = joblib.load("models/scaler.pkl")
-encoder = load_model("models/encoder_model.keras")
