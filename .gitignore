@@ -20,9 +20,7 @@ Thumbs.db
 mydatabase.db
 
 # Model and data files (optional if large)
-*.keras
 *.h5
-*.pkl
 *.joblib
 
 # Streamlit cache
