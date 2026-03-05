@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 from tensorflow.keras.models import load_model
 
-
+# Load model safely
 @st.cache_resource
 def load_diabetes_model():
     model = load_model("diabetes_full_model.keras")
@@ -10,19 +10,12 @@ def load_diabetes_model():
 
 model = load_diabetes_model()
 
-st.title("Diabetes Risk Prediction App")
-
-# Load trained model
-model = load_model("diabetes_full_model.keras")
-
 st.title("🩺 Diabetes Risk Prediction App")
 
-st.write(
-"""
+st.write("""
 This application predicts the **risk of developing diabetes**
 based on lifestyle and health information.
-"""
-)
+""")
 
 st.header("Enter Patient Health Information")
 
@@ -55,32 +48,14 @@ PhysHlth = st.slider(
 # Yes/No Mapping
 yes_no = {"No":0, "Yes":1}
 
-HighBP = yes_no[
-    st.selectbox("Do you have High Blood Pressure?", list(yes_no.keys()))
-]
+HighBP = yes_no[st.selectbox("Do you have High Blood Pressure?", list(yes_no.keys()))]
+HighChol = yes_no[st.selectbox("Do you have High Cholesterol?", list(yes_no.keys()))]
+PhysActivity = yes_no[st.selectbox("Did you do Physical Activity in the Last 30 Days?", list(yes_no.keys()))]
+HeartDisease = yes_no[st.selectbox("Do you have a history of Heart Disease or Heart Attack?", list(yes_no.keys()))]
+DiffWalk = yes_no[st.selectbox("Do you have Difficulty Walking or Climbing Stairs?", list(yes_no.keys()))]
+Smoker = yes_no[st.selectbox("Have you smoked at least 100 cigarettes in your lifetime?", list(yes_no.keys()))]
 
-HighChol = yes_no[
-    st.selectbox("Do you have High Cholesterol?", list(yes_no.keys()))
-]
-
-PhysActivity = yes_no[
-    st.selectbox("Did you do Physical Activity in the Last 30 Days?", list(yes_no.keys()))
-]
-
-HeartDisease = yes_no[
-    st.selectbox("Do you have a history of Heart Disease or Heart Attack?", list(yes_no.keys()))
-]
-
-DiffWalk = yes_no[
-    st.selectbox("Do you have Difficulty Walking or Climbing Stairs?", list(yes_no.keys()))
-]
-
-Smoker = yes_no[
-    st.selectbox("Have you smoked at least 100 cigarettes in your lifetime?", list(yes_no.keys()))
-]
-
-
-# Prediction Button
+# Prediction
 if st.button("Predict Diabetes Risk"):
 
     features = np.array([[BMI, Age, GenHlth, PhysHlth,
@@ -91,7 +66,6 @@ if st.button("Predict Diabetes Risk"):
     prediction = 1 if prob > 0.5 else 0
 
     st.subheader("Prediction Result")
-
     st.write("**Probability of Diabetes Risk:**", round(prob, 3))
 
     if prediction == 1:
