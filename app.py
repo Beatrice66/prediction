@@ -2,6 +2,16 @@ import streamlit as st
 import numpy as np
 from tensorflow.keras.models import load_model
 
+
+@st.cache_resource
+def load_diabetes_model():
+    model = load_model("diabetes_full_model.keras")
+    return model
+
+model = load_diabetes_model()
+
+st.title("Diabetes Risk Prediction App")
+
 # Load trained model
 model = load_model("diabetes_full_model.keras")
 
