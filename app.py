@@ -1,72 +1,81 @@
 import streamlit as st
 import numpy as np
-import pandas as pd
-import tensorflow as tf
-import joblib
-import sqlite3
-st.write("App started successfully
+from tensorflow.keras.models import load_model
 
-# ---------------------------
-# DATABASE
-# ---------------------------
-conn = sqlite3.connect("mydatabase.db", check_same_thread=False)
-c = conn.cursor()
+# Load model
+model = load_model("diabetes_full_model.keras")
 
-def create_table():
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS diabetes_data(
-        BMI REAL,
-        Age INTEGER,
-        GenHlth INTEGER,
-        PhysHlth INTEGER,
-        HighBP INTEGER,
-        Result TEXT
-    )
-    """)
-
-def add_data(BMI, Age, GenHlth, PhysHlth, HighBP, Result):
-    c.execute("INSERT INTO diabetes_data VALUES (?,?,?,?,?,?)",
-              (BMI, Age, GenHlth, PhysHlth, HighBP, Result))
-    conn.commit()
-
-create_table()
-
-# ---------------------------
-# LOAD MODEL
-# ---------------------------
-model = tf.keras.models.load_model("diabetes_full_model.keras")
-scaler = joblib.load("scaler.pkl")
-
-# ---------------------------
-# STREAMLIT UI
-# ---------------------------
 st.title("Diabetes Risk Prediction App")
 
-st.write("Enter health information below to predict diabetes risk.")
+st.write("Enter the patient's health information below:")
 
-# Inputs
-BMI = st.number_input("BMI", 10.0, 60.0)
-Age = st.number_input("Age", 18, 100)
-GenHlth = st.selectbox("General Health (1=Excellent, 5=Poor)", [1,2,3,4,5])
-PhysHlth = st.number_input("Physical Health (Days unhealthy)", 0, 30)
-HighBP = st.selectbox("High Blood Pressure", [0,1])
+# Input fields
+BMI = st.number_input("BMI (Body Mass Index)", min_value=10.0, max_value=60.0, step=0.1)
+
+Age = st.number_input("Age", min_value=1, max_value=120, step=1)
+
+GenHlth = st.selectbox(
+    "General Health",
+    [1,2,3,4,5],
+    help="1 = Excellent, 2 = Very Good, 3 = Good, 4 = Fair, 5 = Poor"
+)
+
+PhysHlth = st.slider(
+    "Number of Days Physical Health Was Not Good (Last 30 Days)",
+    0, 30
+)
+
+HighBP = st.selectbox(
+    "High Blood Pressure",
+    [0,1],
+    help="0 = No, 1 = Yes"
+)
+
+HighChol = st.selectbox(
+    "High Cholesterol",
+    [0,1],
+    help="0 = No, 1 = Yes"
+)
+
+PhysActivity = st.selectbox(
+    "Physical Activity in Last 30 Days",
+    [0,1],
+    help="0 = No, 1 = Yes"
+)
+
+HeartDisease = st.selectbox(
+    "History of Heart Disease or Heart Attack",
+    [0,1],
+    help="0 = No, 1 = Yes"
+)
+
+DiffWalk = st.selectbox(
+    "Difficulty Walking or Climbing Stairs",
+    [0,1],
+    help="0 = No, 1 = Yes"
+)
+
+Smoker = st.selectbox(
+    "Smoker",
+    [0,1],
+    help="0 = No, 1 = Yes"
+)
 
 # Prediction button
 if st.button("Predict Diabetes Risk"):
 
-    input_data = np.array([[BMI, Age, GenHlth, PhysHlth, HighBP]])
+    features = np.array([[BMI, Age, GenHlth, PhysHlth,
+                          HighBP, HighChol, PhysActivity,
+                          HeartDisease, DiffWalk, Smoker]])
 
-    input_scaled = scaler.transform(input_data)
+    prob = model.predict(features)[0][0]
+    prediction = 1 if prob > 0.5 else 0
 
-    prediction = model.predict(input_scaled)
+    st.subheader("Prediction Result")
 
-    risk = prediction[0][0]
+    st.write("**Probability of Diabetes Risk:**", round(prob, 3))
 
-    if risk > 0.5:
-        result = "High Risk of Diabetes"
-        st.error(result)
+    if prediction == 1:
+        st.error("High Risk of Diabetes")
     else:
-        result = "Low Risk of Diabetes"
-        st.success(result)
-
-    add_data(BMI, Age, GenHlth, PhysHlth, HighBP, result)
+        st.success("Low Risk of Diabetes")
