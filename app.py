@@ -1,7 +1,7 @@
 import streamlit as st
 import numpy as np
 from tensorflow.keras.models import load_model
-import joblib  # if you later need scaler
+import joblib  # only needed if using scaler later
 
 # -----------------------------
 # Load the model safely (cached)
@@ -15,12 +15,8 @@ model = load_diabetes_model()
 # -----------------------------
 # App Title & Description
 # -----------------------------
-st.title("🩺 Diabetes Risk Prediction App")
-st.write("""
-This application predicts the **risk of developing diabetes**
-based on lifestyle and health information.
-""")
-
+st.write("This application predicts the **risk of developing diabetes** based on lifestyle and health information.")
+ 
 st.header("Enter Patient Health Information")
 
 # -----------------------------
