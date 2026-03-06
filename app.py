@@ -1,46 +1,57 @@
 import streamlit as st
-import tensorflow as tf
 import numpy as np
-import pandas as pd
-import joblib
+import keras
+import os
 
-# Title
-st.title("Diabetes Risk Prediction App")
+st.set_page_config(page_title="Diabetes Health Predictor", layout="centered")
 
-# Load model, scaler, encoder
+st.title("🩺 Health Indicator Assessment")
+st.write("Please provide the following health information for prediction.")
+
 @st.cache_resource
-def load_files():
-    model = tf.keras.models.load_model("diabetes_full_model.keras")
-    scaler = joblib.load("scaler.pkl")
-    encoder = joblib.load("encoder.pkl")
-    return model, scaler, encoder
+def load_diabetes_model():
+    # Loading the functional_16 model saved on 2026-03-05
+    return keras.models.load_model('diabetes_full_model.keras')
 
-try:
-    model, scaler, encoder = load_files()
-    st.success("Model loaded successfully")
-except Exception as e:
-    st.error(f"Error loading files: {e}")
+model = load_diabetes_model()
 
-# User Inputs
-st.subheader("Enter Patient Information")
+# These match your 10 features in the correct order for the model input
+feature_names = [
+    "BMI", "Age", "GenHlth", "PhysHlth", "HighBP", 
+    "HighChol", "PhysActivity", "HeartDiseaseorAttack", 
+    "DiffWalk", "Smoker"
+]
 
-age = st.number_input("Age", 1, 120)
-bmi = st.number_input("BMI", 10.0, 60.0)
-glucose = st.number_input("Glucose Level", 50, 300)
-blood_pressure = st.number_input("Blood Pressure", 40, 200)
+if model:
+    with st.form("health_form"):
+        cols = st.columns(2)
+        user_inputs = []
+        
+        for i, name in enumerate(feature_names):
+            with cols[i % 2]:
+                # Using selectboxes for binary (0/1) features to make it user-friendly
+                if name in ["HighBP", "HighChol", "PhysActivity", "HeartDiseaseorAttack", "DiffWalk", "Smoker"]:
+                    val = st.selectbox(f"{name}", options=[0, 1], format_func=lambda x: "Yes (1)" if x == 1 else "No (0)")
+                else:
+                    # For numerical/scale features like BMI, Age, GenHlth, PhysHlth
+                    val = st.number_input(f"{name}", value=0.0, step=1.0)
+                
+                user_inputs.append(val)
+        
+        submit = st.form_submit_button("Predict Diabetes Risk")
 
-# Prediction Button
-if st.button("Predict Diabetes Risk"):
+    if submit:
+        # Reshape to (1, 10) as required by input_layer_2
+        data = np.array([user_inputs], dtype="float32")
+        prediction = model.predict(data)
+        risk_score = float(prediction[0][0])
+        
+        st.divider()
+        if risk_score > 0.5:
+            st.error(f"### High Risk Detected")
+            st.write(f"Probability: **{risk_score*100:.1f}%**")
+        else:
+            st.success(f"### Low Risk Detected")
+            st.write(f"Probability: **{risk_score*100:.1f}%**")
 
-    input_data = np.array([[age, bmi, glucose, blood_pressure]])
-
-    # Scale input
-    input_scaled = scaler.transform(input_data)
-
-    # Predict
-    prediction = model.predict(input_scaled)
-
-    if prediction[0][0] > 0.5:
-        st.error("⚠ High Risk of Diabetes")
-    else:
-        st.success("✅ Low Risk of Diabetes")
+        st.caption("Disclaimer: This model uses a neural network with a 0.3 dropout rate for estimation.")
