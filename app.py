@@ -1,68 +1,114 @@
 import streamlit as st
 import numpy as np
-from tensorflow.keras.models import load_model
-import joblib  # only needed if using scaler later
+import keras
+import joblib
+import os
 
-# -----------------------------
-# Load the model safely (cached)
-# -----------------------------
+# Set page configuration
+st.set_page_config(page_title="Diabetes Risk Predictor", layout="centered")
+
+# --- Resource Loading ---
 @st.cache_resource
-def load_diabetes_model():
-    return load_model("models/diabetes_full_model.keras")
+def load_resources():
+    # 1. Load the Keras model (functional_16)
+    # Ensure this file is in your C:\Users\ADMIN\OneDrive\Desktop\prediction\ folder
+    model = keras.models.load_model('diabetes_full_model.keras')
+    
+    # 2. Load the Scaler
+    # This scaler expects exactly 10 features as input
+    scaler = joblib.load('scaler.pkl')
+    
+    return model, scaler
 
-model = load_diabetes_model()
+# Initial Check for files and modules
+try:
+    model, scaler = load_resources()
+except Exception as e:
+    st.error(f"Initialization Error: {e}")
+    st.info("Ensure diabetes_full_model.keras, scaler.pkl, and scikit-learn are installed.")
+    st.stop()
 
-# -----------------------------
-# App Title & Description
-# -----------------------------
-st.write("This application predicts the **risk of developing diabetes** based on lifestyle and health information.")
- 
-st.header("Enter Patient Health Information")
+# --- App UI ---
+st.title("🩺 Diabetes Health Indicator")
+st.markdown("""
+Enter the patient's health information below. This model uses 10 specific indicators 
+to calculate the probability of diabetes risk.
+""")
 
-# -----------------------------
-# User Inputs
-# -----------------------------
-# Numeric inputs
-BMI = st.number_input("Body Mass Index (BMI)", min_value=10.0, max_value=60.0, step=0.1)
-Age = st.number_input("Age", min_value=1, max_value=120, step=1)
+# The 10 features in the EXACT order your scaler and model expect
+feature_names = [
+    "BMI", 
+    "Age", 
+    "GenHlth", 
+    "PhysHlth", 
+    "HighBP", 
+    "HighChol", 
+    "PhysActivity", 
+    "HeartDiseaseorAttack", 
+    "DiffWalk", 
+    "Smoker"
+]
 
-# General Health Mapping (Excellent → Poor)
-health_options = {"Excellent":1, "Very Good":2, "Good":3, "Fair":4, "Poor":5}
-GenHlth_label = st.selectbox("General Health Status", list(health_options.keys()))
-GenHlth = health_options[GenHlth_label]
+# Create the form
+with st.form("input_form"):
+    st.subheader("Patient Clinical Profile")
+    cols = st.columns(2)
+    user_inputs = []
+    
+    for i, name in enumerate(feature_names):
+        with cols[i % 2]:
+            # Binary Categorical Inputs (0 or 1)
+            if name in ["HighBP", "HighChol", "PhysActivity", "HeartDiseaseorAttack", "DiffWalk", "Smoker"]:
+                val = st.selectbox(
+                    f"{name}", 
+                    options=[0, 1], 
+                    format_func=lambda x: "Yes (1)" if x == 1 else "No (0)",
+                    help=f"Select 1 for Yes and 0 for No regarding {name}"
+                )
+            # Numeric Inputs (Scales or raw numbers)
+            else:
+                if name == "BMI":
+                    val = st.number_input(name, min_value=10.0, max_value=60.0, value=25.0, step=0.1)
+                elif name == "GenHlth":
+                    val = st.slider(name, 1, 5, 3, help="1: Excellent, 2: Very Good, 3: Good, 4: Fair, 5: Poor")
+                elif name == "PhysHlth":
+                    val = st.number_input(name, min_value=0.0, max_value=30.0, value=0.0, help="Days of poor physical health in the last 30 days")
+                else: # Age
+                    val = st.number_input(name, min_value=1.0, max_value=100.0, value=30.0)
+            
+            user_inputs.append(val)
+    
+    submit = st.form_submit_button("Generate Prediction")
 
-# Physical Health
-PhysHlth = st.slider("Number of Days Physical Health Was Not Good (Last 30 Days)", 0, 30)
+# --- Prediction Logic ---
+if submit:
+    # 1. Convert inputs to a 2D numpy array (Shape: 1, 10)
+    input_array = np.array([user_inputs], dtype="float32")
+    
+    try:
+        # 2. Scale the data using the pre-loaded StandardScaler
+        # This prevents the "X has 5 features, but StandardScaler is expecting 10" error
+        input_scaled = scaler.transform(input_array)
+        
+        # 3. Pass scaled data to the model
+        prediction = model.predict(input_scaled)
+        risk_score = float(prediction[0][0])
+        
+        # Display results with visual feedback
+        st.divider()
+        if risk_score > 0.5:
+            st.error(f"### Result: High Risk Detected")
+            st.metric(label="Diabetes Risk Probability", value=f"{risk_score*100:.1f}%")
+            st.warning("The patient shows indicators strongly associated with diabetes risk.")
+        else:
+            st.success(f"### Result: Low Risk Detected")
+            st.metric(label="Diabetes Risk Probability", value=f"{risk_score*100:.1f}%")
+            st.info("The patient's health indicators currently show a low risk profile.")
 
-# Yes/No Mapping
-yes_no = {"No":0, "Yes":1}
+    except ValueError as ve:
+        st.error(f"Feature Mismatch Error: {ve}")
+        st.write(f"Current input count: {len(user_inputs)}")
+    except Exception as e:
+        st.error(f"Prediction Error: {e}")
 
-HighBP = yes_no[st.selectbox("Do you have High Blood Pressure?", list(yes_no.keys()))]
-HighChol = yes_no[st.selectbox("Do you have High Cholesterol?", list(yes_no.keys()))]
-PhysActivity = yes_no[st.selectbox("Did you do Physical Activity in the Last 30 Days?", list(yes_no.keys()))]
-HeartDisease = yes_no[st.selectbox("Do you have a history of Heart Disease or Heart Attack?", list(yes_no.keys()))]
-DiffWalk = yes_no[st.selectbox("Do you have Difficulty Walking or Climbing Stairs?", list(yes_no.keys()))]
-Smoker = yes_no[st.selectbox("Have you smoked at least 100 cigarettes in your lifetime?", list(yes_no.keys()))]
-
-# -----------------------------
-# Prediction
-# -----------------------------
-if st.button("Predict Diabetes Risk"):
-
-    features = np.array([[BMI, Age, GenHlth, PhysHlth,
-                          HighBP, HighChol, PhysActivity,
-                          HeartDisease, DiffWalk, Smoker]])
-
-    prob = model.predict(features)[0][0]
-    prediction = 1 if prob > 0.5 else 0
-
-    st.subheader("Prediction Result")
-    st.write("**Probability of Diabetes Risk:**", round(prob, 3))
-
-    if prediction == 1:
-        st.error("⚠️ High Risk of Diabetes")
-    else:
-        st.success("✅ Low Risk of Diabetes")
-
-st.markdown("---")
-st.caption("Disclaimer: This tool is for educational purposes and not a medical diagnosis.")
+st.caption("Disclaimer: This tool is for educational purposes and based on the BRFSS dataset.")
