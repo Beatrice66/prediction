@@ -4,3 +4,4 @@ keras==3.12.1
 scikit-learn
 joblib
 numpy
+opencv-python-headless
