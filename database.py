@@ -1,66 +1,52 @@
-import sqlite3
+import firebase_admin
+from firebase_admin import credentials, db
 
-def create_tables():
+# -----------------------------
+# Initialize Firebase
+# -----------------------------
+cred = credentials.Certificate("serviceAccountKey.json")
+firebase_admin.initialize_app(cred, {
+    'databaseURL': 'https://YOUR_PROJECT_ID.firebaseio.com/'  # replace with your Firebase Realtime Database URL
+})
 
-    conn = sqlite3.connect("hospital.db")
-    c = conn.cursor()
-
-    # Doctor table
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS doctors(
-        name TEXT,
-        national_id TEXT PRIMARY KEY
-    )
-    """)
-
-    # Patient predictions table
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS predictions(
-        doctor TEXT,
-        bmi REAL,
-        age INTEGER,
-        genhlth INTEGER,
-        physhlth INTEGER,
-        result REAL
-    )
-    """)
-
-    conn.commit()
-    conn.close()
-
-
+# -----------------------------
+# Add a new doctor
+# -----------------------------
 def add_doctor(name, national_id):
+    ref = db.reference('doctors')
+    ref.child(national_id).set({
+        'name': name
+    })
 
-    conn = sqlite3.connect("hospital.db")
-    c = conn.cursor()
+# -----------------------------
+# Doctor login verification
+# -----------------------------
+def login_doctor(name, national_id):
+    ref = db.reference(f'doctors/{national_id}')
+    doctor = ref.get()
+    if doctor and doctor.get('name') == name:
+        return True
+    return False
 
-    c.execute("INSERT INTO doctors VALUES (?,?)",(name,national_id))
+# -----------------------------
+# Save a patient prediction
+# -----------------------------
+def save_prediction(doctor, patient_name, patient_id, date, bmi, age, genhlth, physhlth, result):
+    ref = db.reference('predictions')
+    ref.child(patient_id).set({
+        'doctor': doctor,
+        'patient_name': patient_name,
+        'date': date,
+        'bmi': bmi,
+        'age': age,
+        'genhlth': genhlth,
+        'physhlth': physhlth,
+        'result': result
+    })
 
-    conn.commit()
-    conn.close()
-
-
-def login_doctor(name,national_id):
-
-    conn = sqlite3.connect("hospital.db")
-    c = conn.cursor()
-
-    c.execute("SELECT * FROM doctors WHERE name=? AND national_id=?",(name,national_id))
-
-    data = c.fetchone()
-
-    conn.close()
-
-    return data
-
-
-def save_prediction(doctor,bmi,age,genhlth,physhlth,result):
-
-    conn = sqlite3.connect("hospital.db")
-    c = conn.cursor()
-
-    c.execute("INSERT INTO predictions VALUES (?,?,?,?,?,?)",
-              (doctor,bmi,age,genhlth,physhlth,result))
-
-    conn.commit()
-    conn.close()
+# -----------------------------
+# Example usage
+# -----------------------------
+# add_doctor("Dr. Smith", "12345")
+# print(login_doctor("Dr. Smith", "12345"))
+# save_prediction("Dr. Smith", "John Doe", "p001", "2026-03-11", 28.3, 45, 3, 2, 0.85)
