@@ -1,16 +1,12 @@
 # app.py
-import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, db
 
-# -----------------------------
-# Initialize Firebase
-# -----------------------------
 cred = credentials.Certificate("serviceAccountKey.json")
-firebase_admin.initialize_app(cred, {
-    'databaseURL': 'https://diabetes-risk-prediction-20be1-default-rtdb.firebaseio.com/'  # Replace with your Firebase Realtime Database URL
-})
 
+firebase_admin.initialize_app(cred, {
+    'databaseURL': 'https://diabetes-risk-prediction-20be1-default-rtdb.firebaseio.com/'
+})
 # -----------------------------
 # Firebase Functions
 # -----------------------------
