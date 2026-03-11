@@ -6,9 +6,9 @@ from firebase_admin import credentials, db
 # -----------------------------
 # Initialize Firebase
 # -----------------------------
-cred = credentials.Certificate("firebase.json")
+cred = credentials.Certificate("serviceAccountKey.json")
 firebase_admin.initialize_app(cred, {
-    'databaseURL': 'databaseURL': 'https://diabetes-risk-prediction-20be1-default-rtdb.firebaseio.com/'  # replace with your actual Firebase Realtime Database URL  # Replace with your database URL
+    'databaseURL': 'https://diabetes-risk-prediction-20be1-default-rtdb.firebaseio.com/'  # Replace with your Firebase Realtime Database URL
 })
 
 # -----------------------------
@@ -84,8 +84,13 @@ def main():
 
         if st.button("Save Prediction"):
             if patient_name and patient_id:
-                save_prediction(st.session_state['doctor'], patient_name, patient_id, str(date),
-                                bmi, age, genhlth, physhlth, result)
+                save_prediction(
+                    st.session_state['doctor'],
+                    patient_name,
+                    patient_id,
+                    str(date),
+                    bmi, age, genhlth, physhlth, result
+                )
                 st.success(f"Prediction for {patient_name} saved successfully!")
             else:
                 st.error("Please enter patient name and ID.")
