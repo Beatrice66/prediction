@@ -8,7 +8,7 @@ from firebase_admin import credentials, db
 # -----------------------------
 cred = credentials.Certificate("firebase.json")
 firebase_admin.initialize_app(cred, {
-    'databaseURL': https://console.firebase.google.com/project/diabetes-risk-prediction-20be1/settings/general  # Replace with your database URL
+    'databaseURL': 'databaseURL': 'https://diabetes-risk-prediction-20be1-default-rtdb.firebaseio.com/'  # replace with your actual Firebase Realtime Database URL  # Replace with your database URL
 })
 
 # -----------------------------
