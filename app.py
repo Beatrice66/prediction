@@ -2,119 +2,174 @@ import streamlit as st
 import numpy as np
 import keras
 import os
-from database import *
+import re
 
-st.set_page_config(page_title="Hospital Diabetes AI", layout="centered")
+# -----------------------------
+# Page Configuration
+# -----------------------------
+st.set_page_config(page_title="Diabetes Health Predictor", layout="centered")
 
-create_tables()
-
-# Session
+# -----------------------------
+# Session State
+# -----------------------------
 if "logged_in" not in st.session_state:
-    st.session_state.logged_in=False
+    st.session_state.logged_in = False
 
-if "doctor" not in st.session_state:
-    st.session_state.doctor=""
+# -----------------------------
+# Validate Username (Two Names)
+# -----------------------------
+def valid_username(name):
+    parts = name.strip().split()
+    return len(parts) == 2
 
-# Load model
-@st.cache_resource
-def load_model():
-    path=os.path.join(os.path.dirname(__file__),"diabetes_full_model.keras")
-    return keras.models.load_model(path)
+# -----------------------------
+# Validate Password
+# (2 numbers + 1 letter)
+# -----------------------------
+def valid_password(password):
+    pattern = r"^(?=(?:.*\d){2})(?=(?:.*[A-Za-z]){1})[A-Za-z\d]{3}$"
+    return re.match(pattern, password)
 
-model=load_model()
-
-# LOGIN PAGE
+# -----------------------------
+# Login Page
+# -----------------------------
 def login():
 
     st.title("🔐 Doctor Login")
 
-    name=st.text_input("Full Name (Two Names)")
-    national_id=st.text_input("National ID",type="password")
+    st.write("Username must contain **two names**.")
+    st.write("Password must contain **two numbers and one letter** (example: 12A).")
+
+    fullname = st.text_input("Full Name (Two Names)")
+    password = st.text_input("Password", type="password")
 
     if st.button("Login"):
 
-        data=login_doctor(name,national_id)
+        if not valid_username(fullname):
+            st.error("Username must contain exactly two names")
+            return
 
-        if data:
-            st.session_state.logged_in=True
-            st.session_state.doctor=name
-            st.success("Login successful")
-            st.rerun()
+        if not valid_password(password):
+            st.error("Password must contain exactly two numbers and one letter")
+            return
 
-        else:
-            st.error("Doctor not registered")
-
-# REGISTER DOCTOR
-def register():
-
-    st.subheader("Register New Doctor")
-
-    name=st.text_input("Full Name")
-    national_id=st.text_input("National ID")
-
-    if st.button("Register Doctor"):
-
-        add_doctor(name,national_id)
-
-        st.success("Doctor registered")
-
-# MAIN APP
-def predictor():
-
-    st.title("🩺 Diabetes Risk Predictor")
-
-    st.write(f"Logged in as **Dr. {st.session_state.doctor}**")
-
-    if st.button("Logout"):
-        st.session_state.logged_in=False
+        st.session_state.logged_in = True
+        st.success("Login successful")
         st.rerun()
 
-    with st.form("patient_form"):
+# -----------------------------
+# Load Model
+# -----------------------------
+@st.cache_resource
+def load_diabetes_model():
+    model_path = os.path.join(os.path.dirname(__file__), "diabetes_full_model.keras")
+    return keras.models.load_model(model_path)
 
-        bmi=st.number_input("BMI",10.0,70.0,25.0)
+# -----------------------------
+# Diabetes Predictor Page
+# -----------------------------
+def diabetes_app():
 
-        age=st.number_input("Age",1,120,30)
+    model = load_diabetes_model()
 
-        genhlth=st.slider("General Health",1,5,3)
+    st.title("🩺 Diabetes Health Predictor")
+    st.write("Doctor: Please enter patient health information.")
 
-        physhlth=st.slider("Physical Health Bad Days",0,30,0)
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.rerun()
 
-        highbp=st.selectbox("High Blood Pressure",[0,1])
+    feature_names = [
+        "BMI",
+        "Age",
+        "GenHlth",
+        "PhysHlth",
+        "HighBP",
+        "HighChol",
+        "PhysActivity",
+        "HeartDiseaseorAttack",
+        "DiffWalk",
+        "Smoker"
+    ]
 
-        highchol=st.selectbox("High Cholesterol",[0,1])
+    with st.form("health_form"):
 
-        activity=st.selectbox("Physical Activity",[0,1])
+        cols = st.columns(2)
+        user_inputs = []
 
-        heart=st.selectbox("Heart Disease",[0,1])
+        for i, name in enumerate(feature_names):
 
-        diffwalk=st.selectbox("Difficulty Walking",[0,1])
+            with cols[i % 2]:
 
-        smoker=st.selectbox("Smoker",[0,1])
+                if name == "BMI":
+                    val = st.number_input(
+                        "BMI",
+                        min_value=10.0,
+                        max_value=70.0,
+                        value=25.0,
+                        step=0.1
+                    )
 
-        submit=st.form_submit_button("Predict")
+                elif name == "Age":
+                    val = st.number_input(
+                        "Age",
+                        min_value=1,
+                        max_value=120,
+                        value=30
+                    )
+
+                elif name == "GenHlth":
+                    val = st.slider(
+                        "General Health",
+                        1,
+                        5,
+                        3,
+                        help="1 = Excellent, 5 = Poor"
+                    )
+
+                elif name == "PhysHlth":
+                    val = st.slider(
+                        "Physical Health (Bad Days)",
+                        0,
+                        30,
+                        0,
+                        help="Days physical health was not good in past 30 days"
+                    )
+
+                else:
+                    val = st.selectbox(
+                        name,
+                        options=[0, 1],
+                        format_func=lambda x: "Yes" if x == 1 else "No"
+                    )
+
+                user_inputs.append(val)
+
+        submit = st.form_submit_button("Predict Diabetes Risk")
 
     if submit:
 
-        data=np.array([[bmi,age,genhlth,physhlth,highbp,
-                        highchol,activity,heart,diffwalk,smoker]],
-                        dtype="float32")
+        data = np.array([user_inputs], dtype="float32")
 
-        pred=model.predict(data,verbose=0)
+        prediction = model.predict(data, verbose=0)
 
-        risk=float(pred[0][0])
+        risk_score = float(prediction[0][0])
 
         st.divider()
 
-        if risk>0.5:
-            st.error(f"High Risk ({risk*100:.1f}%)")
+        if risk_score > 0.5:
+            st.error("⚠️ High Diabetes Risk")
+            st.write(f"Probability: **{risk_score*100:.1f}%**")
         else:
-            st.success(f"Low Risk ({risk*100:.1f}%)")
+            st.success("✅ Low Diabetes Risk")
+            st.write(f"Probability: **{risk_score*100:.1f}%**")
 
-        save_prediction(st.session_state.doctor,bmi,age,genhlth,physhlth,risk)
+        st.caption("This system assists doctors and is not a medical diagnosis.")
 
-# APP CONTROL
+# -----------------------------
+# App Control
+# -----------------------------
 if st.session_state.logged_in:
-    predictor()
+    diabetes_app()
 else:
     login()
-    register()
