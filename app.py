@@ -52,11 +52,22 @@ with st.form("health_form"):
             elif name == "Age":
                 val = st.number_input(name, min_value=1, max_value=120, value=30, step=1, help="Age in years")
             # Health rating features as sliders
-            elif name in ["GenHlth", "PhysHlth"]:
-                val = st.slider(
-                    name, min_value=0, max_value=5, value=3,
-                    help=f"0 = Poor, 5 = Excellent"
-                )
+           elif name == "GenHlth":
+    val = st.slider(
+        "GenHlth", 
+        min_value=1, 
+        max_value=5, 
+        value=3,
+        help="1 = Excellent, 2 = Very Good, 3 = Good, 4 = Fair, 5 = Poor"
+    )
+    elif name == "PhysHlth":
+    val = st.slider(
+        "PhysHlth",
+        min_value=0,
+        max_value=30,
+        value=0,
+        help="Number of days physical health was not good in the past 30 days"
+    )
             user_inputs.append(val)
 
     submit = st.form_submit_button("Predict Diabetes Risk")
