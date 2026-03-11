@@ -34,7 +34,6 @@ def valid_password(password):
 # Login Page
 # -----------------------------
 def login():
-
     st.title("🔐 Doctor Login")
 
     st.write("Username must contain **two names**.")
@@ -44,11 +43,9 @@ def login():
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
-
         if not valid_username(fullname):
             st.error("Username must contain exactly two names")
             return
-
         if not valid_password(password):
             st.error("Password must contain exactly two numbers and one letter")
             return
@@ -71,11 +68,9 @@ def load_diabetes_model():
 # Diabetes Prediction Page
 # -----------------------------
 def diabetes_app():
-
     model = load_diabetes_model()
 
     st.title("🩺 Diabetes Health Predictor")
-
     st.write(f"Logged in as **Dr. {st.session_state.doctor}**")
 
     if st.button("Logout"):
@@ -88,13 +83,11 @@ def diabetes_app():
     # Patient Details
     # -----------------------------
     st.subheader("Patient Information")
-
     patient_name = st.text_input("Patient Full Name")
     patient_id = st.text_input("Patient Unique Number")
     visit_date = st.date_input("Visit Date", value=date.today())
 
     st.divider()
-
     st.subheader("Health Indicators")
 
     feature_names = [
@@ -111,56 +104,21 @@ def diabetes_app():
     ]
 
     with st.form("health_form"):
-
         cols = st.columns(2)
         user_inputs = []
 
         for i, name in enumerate(feature_names):
-
             with cols[i % 2]:
-
                 if name == "BMI":
-                    val = st.number_input(
-                        "BMI",
-                        min_value=10.0,
-                        max_value=70.0,
-                        value=25.0,
-                        step=0.1
-                    )
-
+                    val = st.number_input("BMI", min_value=10.0, max_value=70.0, value=25.0, step=0.1)
                 elif name == "Age":
-                    val = st.number_input(
-                        "Age",
-                        min_value=1,
-                        max_value=120,
-                        value=30
-                    )
-
+                    val = st.number_input("Age", min_value=1, max_value=120, value=30)
                 elif name == "GenHlth":
-                    val = st.slider(
-                        "General Health",
-                        1,
-                        5,
-                        3,
-                        help="1 = Excellent, 5 = Poor"
-                    )
-
+                    val = st.slider("General Health", 1, 5, 3, help="1 = Excellent, 5 = Poor")
                 elif name == "PhysHlth":
-                    val = st.slider(
-                        "Physical Health (Bad Days)",
-                        0,
-                        30,
-                        0,
-                        help="Days physical health was not good in past 30 days"
-                    )
-
+                    val = st.slider("Physical Health (Bad Days)", 0, 30, 0, help="Days physical health was not good in past 30 days")
                 else:
-                    val = st.selectbox(
-                        name,
-                        options=[0, 1],
-                        format_func=lambda x: "Yes" if x == 1 else "No"
-                    )
-
+                    val = st.selectbox(name, options=[0, 1], format_func=lambda x: "Yes" if x == 1 else "No")
                 user_inputs.append(val)
 
         submit = st.form_submit_button("Predict Diabetes Risk")
@@ -169,21 +127,16 @@ def diabetes_app():
     # Prediction
     # -----------------------------
     if submit:
-
         if patient_name == "" or patient_id == "":
             st.error("Please fill in patient details first")
             return
 
         data = np.array([user_inputs], dtype="float32")
-
         prediction = model.predict(data, verbose=0)
-
         risk_score = float(prediction[0][0])
 
         st.divider()
-
         st.subheader("Prediction Result")
-
         st.write("Patient Name:", patient_name)
         st.write("Patient ID:", patient_id)
         st.write("Visit Date:", visit_date)
