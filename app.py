@@ -2,162 +2,119 @@ import streamlit as st
 import numpy as np
 import keras
 import os
+from database import *
 
-# -----------------------------
-# Page Configuration
-# -----------------------------
-st.set_page_config(page_title="Diabetes Health Predictor", layout="centered")
+st.set_page_config(page_title="Hospital Diabetes AI", layout="centered")
 
-# -----------------------------
-# Example Doctor Accounts
-# (Name : National ID)
-# -----------------------------
-users = {
-    "John Kamau": "12345678",
-    "Mary Wanjiku": "23456789",
-    "Peter Otieno": "34567890"
-}
+create_tables()
 
-# -----------------------------
-# Session State
-# -----------------------------
+# Session
 if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
+    st.session_state.logged_in=False
 
-# -----------------------------
-# Login Page
-# -----------------------------
+if "doctor" not in st.session_state:
+    st.session_state.doctor=""
+
+# Load model
+@st.cache_resource
+def load_model():
+    path=os.path.join(os.path.dirname(__file__),"diabetes_full_model.keras")
+    return keras.models.load_model(path)
+
+model=load_model()
+
+# LOGIN PAGE
 def login():
 
     st.title("🔐 Doctor Login")
-    st.write("Enter your **Full Name** and **National ID** to access the system.")
 
-    fullname = st.text_input("Full Name (First and Last Name)")
-    national_id = st.text_input("National ID", type="password")
+    name=st.text_input("Full Name (Two Names)")
+    national_id=st.text_input("National ID",type="password")
 
     if st.button("Login"):
 
-        if fullname in users and users[fullname] == national_id:
-            st.session_state.logged_in = True
+        data=login_doctor(name,national_id)
+
+        if data:
+            st.session_state.logged_in=True
+            st.session_state.doctor=name
             st.success("Login successful")
             st.rerun()
 
         else:
-            st.error("Invalid name or National ID")
+            st.error("Doctor not registered")
 
-# -----------------------------
-# Load Model
-# -----------------------------
-@st.cache_resource
-def load_diabetes_model():
-    model_path = os.path.join(os.path.dirname(__file__), "diabetes_full_model.keras")
-    return keras.models.load_model(model_path)
+# REGISTER DOCTOR
+def register():
 
-# -----------------------------
-# Diabetes Predictor Page
-# -----------------------------
-def diabetes_app():
+    st.subheader("Register New Doctor")
 
-    model = load_diabetes_model()
+    name=st.text_input("Full Name")
+    national_id=st.text_input("National ID")
 
-    st.title("🩺 Diabetes Health Predictor")
-    st.write("Doctor: Please enter patient health information.")
+    if st.button("Register Doctor"):
+
+        add_doctor(name,national_id)
+
+        st.success("Doctor registered")
+
+# MAIN APP
+def predictor():
+
+    st.title("🩺 Diabetes Risk Predictor")
+
+    st.write(f"Logged in as **Dr. {st.session_state.doctor}**")
 
     if st.button("Logout"):
-        st.session_state.logged_in = False
+        st.session_state.logged_in=False
         st.rerun()
 
-    feature_names = [
-        "BMI",
-        "Age",
-        "GenHlth",
-        "PhysHlth",
-        "HighBP",
-        "HighChol",
-        "PhysActivity",
-        "HeartDiseaseorAttack",
-        "DiffWalk",
-        "Smoker"
-    ]
+    with st.form("patient_form"):
 
-    with st.form("health_form"):
+        bmi=st.number_input("BMI",10.0,70.0,25.0)
 
-        cols = st.columns(2)
-        user_inputs = []
+        age=st.number_input("Age",1,120,30)
 
-        for i, name in enumerate(feature_names):
+        genhlth=st.slider("General Health",1,5,3)
 
-            with cols[i % 2]:
+        physhlth=st.slider("Physical Health Bad Days",0,30,0)
 
-                if name == "BMI":
-                    val = st.number_input(
-                        "BMI",
-                        min_value=10.0,
-                        max_value=70.0,
-                        value=25.0,
-                        step=0.1
-                    )
+        highbp=st.selectbox("High Blood Pressure",[0,1])
 
-                elif name == "Age":
-                    val = st.number_input(
-                        "Age",
-                        min_value=1,
-                        max_value=120,
-                        value=30
-                    )
+        highchol=st.selectbox("High Cholesterol",[0,1])
 
-                elif name == "GenHlth":
-                    val = st.slider(
-                        "General Health",
-                        1,
-                        5,
-                        3,
-                        help="1 = Excellent, 5 = Poor"
-                    )
+        activity=st.selectbox("Physical Activity",[0,1])
 
-                elif name == "PhysHlth":
-                    val = st.slider(
-                        "Physical Health (Bad Days)",
-                        0,
-                        30,
-                        0,
-                        help="Days physical health was not good in past 30 days"
-                    )
+        heart=st.selectbox("Heart Disease",[0,1])
 
-                else:
-                    val = st.selectbox(
-                        name,
-                        options=[0, 1],
-                        format_func=lambda x: "Yes" if x == 1 else "No"
-                    )
+        diffwalk=st.selectbox("Difficulty Walking",[0,1])
 
-                user_inputs.append(val)
+        smoker=st.selectbox("Smoker",[0,1])
 
-        submit = st.form_submit_button("Predict Diabetes Risk")
+        submit=st.form_submit_button("Predict")
 
     if submit:
 
-        data = np.array([user_inputs], dtype="float32")
+        data=np.array([[bmi,age,genhlth,physhlth,highbp,
+                        highchol,activity,heart,diffwalk,smoker]],
+                        dtype="float32")
 
-        prediction = model.predict(data, verbose=0)
+        pred=model.predict(data,verbose=0)
 
-        risk_score = float(prediction[0][0])
+        risk=float(pred[0][0])
 
         st.divider()
 
-        if risk_score > 0.5:
-            st.error("⚠️ High Diabetes Risk")
-            st.write(f"Probability: **{risk_score*100:.1f}%**")
+        if risk>0.5:
+            st.error(f"High Risk ({risk*100:.1f}%)")
         else:
-            st.success("✅ Low Diabetes Risk")
-            st.write(f"Probability: **{risk_score*100:.1f}%**")
+            st.success(f"Low Risk ({risk*100:.1f}%)")
 
-        st.caption("This system assists doctors and is not a medical diagnosis.")
+        save_prediction(st.session_state.doctor,bmi,age,genhlth,physhlth,risk)
 
-# -----------------------------
-# App Control
-# -----------------------------
+# APP CONTROL
 if st.session_state.logged_in:
-    diabetes_app()
+    predictor()
 else:
     login()
+    register()
