@@ -1,27 +1,27 @@
 import sqlite3
 
-DB_NAME = "diabetes_app.db"
+def create_tables():
 
-def create_table():
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
+    conn = sqlite3.connect("hospital.db")
+    c = conn.cursor()
 
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS patients (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+    # Doctor table
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS doctors(
+        name TEXT,
+        national_id TEXT PRIMARY KEY
+    )
+    """)
+
+    # Patient predictions table
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS predictions(
+        doctor TEXT,
         bmi REAL,
         age INTEGER,
         genhlth INTEGER,
         physhlth INTEGER,
-        highbp INTEGER,
-        highchol INTEGER,
-        physactivity INTEGER,
-        heartdisease INTEGER,
-        diffwalk INTEGER,
-        smoker INTEGER,
-        probability REAL,
-        prediction INTEGER,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        result REAL
     )
     """)
 
@@ -29,19 +29,38 @@ def create_table():
     conn.close()
 
 
-def save_prediction(data):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
+def add_doctor(name, national_id):
 
-    cursor.execute("""
-        INSERT INTO patients (
-            bmi, age, genhlth, physhlth,
-            highbp, highchol, physactivity,
-            heartdisease, diffwalk, smoker,
-            probability, prediction
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, data)
+    conn = sqlite3.connect("hospital.db")
+    c = conn.cursor()
+
+    c.execute("INSERT INTO doctors VALUES (?,?)",(name,national_id))
+
+    conn.commit()
+    conn.close()
+
+
+def login_doctor(name,national_id):
+
+    conn = sqlite3.connect("hospital.db")
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM doctors WHERE name=? AND national_id=?",(name,national_id))
+
+    data = c.fetchone()
+
+    conn.close()
+
+    return data
+
+
+def save_prediction(doctor,bmi,age,genhlth,physhlth,result):
+
+    conn = sqlite3.connect("hospital.db")
+    c = conn.cursor()
+
+    c.execute("INSERT INTO predictions VALUES (?,?,?,?,?,?)",
+              (doctor,bmi,age,genhlth,physhlth,result))
 
     conn.commit()
     conn.close()
