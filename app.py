@@ -6,7 +6,7 @@ from firebase_admin import credentials, db
 # -----------------------------
 # Initialize Firebase
 # -----------------------------
-cred = credentials.Certificate("serviceAccountKey.json")
+cred = credentials.Certificate("firebase.json")
 firebase_admin.initialize_app(cred, {
     'databaseURL': 'https://YOUR_PROJECT_ID.firebaseio.com/'  # Replace with your database URL
 })
