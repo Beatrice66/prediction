@@ -3,6 +3,7 @@ import numpy as np
 import keras
 import os
 import re
+from datetime import date
 
 # -----------------------------
 # Page Configuration
@@ -16,15 +17,14 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
 # -----------------------------
-# Validate Username (Two Names)
+# Username Validation
 # -----------------------------
 def valid_username(name):
     parts = name.strip().split()
     return len(parts) == 2
 
 # -----------------------------
-# Validate Password
-# (2 numbers + 1 letter)
+# Password Validation
 # -----------------------------
 def valid_password(password):
     pattern = r"^(?=(?:.*\d){2})(?=(?:.*[A-Za-z]){1})[A-Za-z\d]{3}$"
@@ -40,7 +40,7 @@ def login():
     st.write("Username must contain **two names**.")
     st.write("Password must contain **two numbers and one letter** (example: 12A).")
 
-    fullname = st.text_input("Full Name (Two Names)")
+    fullname = st.text_input("Doctor Full Name")
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
@@ -54,6 +54,8 @@ def login():
             return
 
         st.session_state.logged_in = True
+        st.session_state.doctor = fullname
+
         st.success("Login successful")
         st.rerun()
 
@@ -66,18 +68,34 @@ def load_diabetes_model():
     return keras.models.load_model(model_path)
 
 # -----------------------------
-# Diabetes Predictor Page
+# Diabetes Prediction Page
 # -----------------------------
 def diabetes_app():
 
     model = load_diabetes_model()
 
     st.title("🩺 Diabetes Health Predictor")
-    st.write("Doctor: Please enter patient health information.")
+
+    st.write(f"Logged in as **Dr. {st.session_state.doctor}**")
 
     if st.button("Logout"):
         st.session_state.logged_in = False
         st.rerun()
+
+    st.divider()
+
+    # -----------------------------
+    # Patient Details
+    # -----------------------------
+    st.subheader("Patient Information")
+
+    patient_name = st.text_input("Patient Full Name")
+    patient_id = st.text_input("Patient Unique Number")
+    visit_date = st.date_input("Visit Date", value=date.today())
+
+    st.divider()
+
+    st.subheader("Health Indicators")
 
     feature_names = [
         "BMI",
@@ -147,7 +165,14 @@ def diabetes_app():
 
         submit = st.form_submit_button("Predict Diabetes Risk")
 
+    # -----------------------------
+    # Prediction
+    # -----------------------------
     if submit:
+
+        if patient_name == "" or patient_id == "":
+            st.error("Please fill in patient details first")
+            return
 
         data = np.array([user_inputs], dtype="float32")
 
@@ -157,12 +182,16 @@ def diabetes_app():
 
         st.divider()
 
+        st.subheader("Prediction Result")
+
+        st.write("Patient Name:", patient_name)
+        st.write("Patient ID:", patient_id)
+        st.write("Visit Date:", visit_date)
+
         if risk_score > 0.5:
-            st.error("⚠️ High Diabetes Risk")
-            st.write(f"Probability: **{risk_score*100:.1f}%**")
+            st.error(f"⚠️ High Diabetes Risk ({risk_score*100:.1f}%)")
         else:
-            st.success("✅ Low Diabetes Risk")
-            st.write(f"Probability: **{risk_score*100:.1f}%**")
+            st.success(f"✅ Low Diabetes Risk ({risk_score*100:.1f}%)")
 
         st.caption("This system assists doctors and is not a medical diagnosis.")
 
