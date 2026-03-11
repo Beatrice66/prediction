@@ -1,95 +1,205 @@
-# app.py
-import firebase_admin
-from firebase_admin import credentials, db
 
-cred = credentials.Certificate("serviceAccountKey.json")
-
-firebase_admin.initialize_app(cred, {
-    'databaseURL': 'https://diabetes-risk-prediction-20be1-default-rtdb.firebaseio.com/'
-})
-# -----------------------------
-# Firebase Functions
-# -----------------------------
-def add_doctor(name, national_id):
-    ref = db.reference('doctors')
-    ref.child(national_id).set({'name': name})
-
-def login_doctor(name, national_id):
-    ref = db.reference(f'doctors/{national_id}')
-    doctor = ref.get()
-    if doctor and doctor.get('name') == name:
-        return True
-    return False
-
-def save_prediction(doctor, patient_name, patient_id, date, bmi, age, genhlth, physhlth, result):
-    ref = db.reference('predictions')
-    ref.child(patient_id).set({
-        'doctor': doctor,
-        'patient_name': patient_name,
-        'date': date,
-        'bmi': bmi,
-        'age': age,
-        'genhlth': genhlth,
-        'physhlth': physhlth,
-        'result': result
-    })
+import streamlit as st
+import numpy as np
+import keras
+import os
+import re
+from datetime import date
 
 # -----------------------------
-# Streamlit UI
+# Page Configuration
 # -----------------------------
-def main():
-    st.title("Diabetes Health Predictor")
-    st.divider()
+st.set_page_config(page_title="Diabetes Health Predictor", layout="centered")
 
-    # --- Doctor login section ---
-    st.header("Doctor Login")
-    doctor_name = st.text_input("Doctor Name")
-    doctor_id = st.text_input("National ID")
-    
+# -----------------------------
+# Session State
+# -----------------------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+# -----------------------------
+# Username Validation
+# -----------------------------
+def valid_username(name):
+    parts = name.strip().split()
+    return len(parts) == 2
+
+# -----------------------------
+# Password Validation
+# -----------------------------
+def valid_password(password):
+    pattern = r"^(?=(?:.*\d){2})(?=(?:.*[A-Za-z]){1})[A-Za-z\d]{3}$"
+    return re.match(pattern, password)
+
+# -----------------------------
+# Login Page
+# -----------------------------
+def login():
+
+    st.title("🔐 Doctor Login")
+
+    st.write("Username must contain **two names**.")
+    st.write("Password must contain **two numbers and one letter** (example: 12A).")
+
+    fullname = st.text_input("Doctor Full Name")
+    password = st.text_input("Password", type="password")
+
     if st.button("Login"):
-        if login_doctor(doctor_name, doctor_id):
-            st.success("Login successful!")
-            st.session_state['doctor'] = doctor_name
+
+        if not valid_username(fullname):
+            st.error("Username must contain exactly two names")
+            return
+
+        if not valid_password(password):
+            st.error("Password must contain exactly two numbers and one letter")
+            return
+
+        st.session_state.logged_in = True
+        st.session_state.doctor = fullname
+
+        st.success("Login successful")
+        st.rerun()
+
+# -----------------------------
+# Load Model
+# -----------------------------
+@st.cache_resource
+def load_diabetes_model():
+    model_path = os.path.join(os.path.dirname(__file__), "diabetes_full_model.keras")
+    return keras.models.load_model(model_path)
+
+# -----------------------------
+# Diabetes Prediction Page
+# -----------------------------
+def diabetes_app():
+
+    model = load_diabetes_model()
+
+    st.title("🩺 Diabetes Health Predictor")
+
+    st.write(f"Logged in as **Dr. {st.session_state.doctor}**")
+
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.rerun()
+
+    st.divider()
+
+    # -----------------------------
+    # Patient Details
+    # -----------------------------
+    st.subheader("Patient Information")
+
+    patient_name = st.text_input("Patient Full Name")
+    patient_id = st.text_input("Patient Unique Number")
+    visit_date = st.date_input("Visit Date", value=date.today())
+
+    st.divider()
+
+    st.subheader("Health Indicators")
+
+    feature_names = [
+        "BMI",
+        "Age",
+        "GenHlth",
+        "PhysHlth",
+        "HighBP",
+        "HighChol",
+        "PhysActivity",
+        "HeartDiseaseorAttack",
+        "DiffWalk",
+        "Smoker"
+    ]
+
+    with st.form("health_form"):
+
+        cols = st.columns(2)
+        user_inputs = []
+
+        for i, name in enumerate(feature_names):
+
+            with cols[i % 2]:
+
+                if name == "BMI":
+                    val = st.number_input(
+                        "BMI",
+                        min_value=10.0,
+                        max_value=70.0,
+                        value=25.0,
+                        step=0.1
+                    )
+
+                elif name == "Age":
+                    val = st.number_input(
+                        "Age",
+                        min_value=1,
+                        max_value=120,
+                        value=30
+                    )
+
+                elif name == "GenHlth":
+                    val = st.slider(
+                        "General Health",
+                        1,
+                        5,
+                        3,
+                        help="1 = Excellent, 5 = Poor"
+                    )
+
+                elif name == "PhysHlth":
+                    val = st.slider(
+                        "Physical Health (Bad Days)",
+                        0,
+                        30,
+                        0,
+                        help="Days physical health was not good in past 30 days"
+                    )
+
+                else:
+                    val = st.selectbox(
+                        name,
+                        options=[0, 1],
+                        format_func=lambda x: "Yes" if x == 1 else "No"
+                    )
+
+                user_inputs.append(val)
+
+        submit = st.form_submit_button("Predict Diabetes Risk")
+
+    # -----------------------------
+    # Prediction
+    # -----------------------------
+    if submit:
+
+        if patient_name == "" or patient_id == "":
+            st.error("Please fill in patient details first")
+            return
+
+        data = np.array([user_inputs], dtype="float32")
+
+        prediction = model.predict(data, verbose=0)
+
+        risk_score = float(prediction[0][0])
+
+        st.divider()
+
+        st.subheader("Prediction Result")
+
+        st.write("Patient Name:", patient_name)
+        st.write("Patient ID:", patient_id)
+        st.write("Visit Date:", visit_date)
+
+        if risk_score > 0.5:
+            st.error(f"⚠️ High Diabetes Risk ({risk_score*100:.1f}%)")
         else:
-            st.error("Invalid credentials. Please add your account first.")
+            st.success(f"✅ Low Diabetes Risk ({risk_score*100:.1f}%)")
 
-    st.divider()
+        st.caption("This system assists doctors and is not a medical diagnosis.")
 
-    # --- Add doctor section (optional) ---
-    st.header("Add New Doctor (Admin Only)")
-    new_doctor_name = st.text_input("New Doctor Name")
-    new_doctor_id = st.text_input("New Doctor National ID")
-    if st.button("Add Doctor"):
-        if new_doctor_name and new_doctor_id:
-            add_doctor(new_doctor_name, new_doctor_id)
-            st.success(f"Doctor {new_doctor_name} added successfully!")
-
-    st.divider()
-
-    # --- Patient prediction input ---
-    if 'doctor' in st.session_state:
-        st.header("Enter Patient Details")
-        patient_name = st.text_input("Patient Name")
-        patient_id = st.text_input("Patient ID")
-        date = st.date_input("Date")
-        bmi = st.number_input("BMI", min_value=0.0, step=0.1)
-        age = st.number_input("Age", min_value=0, step=1)
-        genhlth = st.slider("General Health (1-5)", 1, 5)
-        physhlth = st.slider("Physical Health (0-30)", 0, 30)
-        result = st.number_input("Predicted Diabetes Risk (0-1)", min_value=0.0, max_value=1.0, step=0.01)
-
-        if st.button("Save Prediction"):
-            if patient_name and patient_id:
-                save_prediction(
-                    st.session_state['doctor'],
-                    patient_name,
-                    patient_id,
-                    str(date),
-                    bmi, age, genhlth, physhlth, result
-                )
-                st.success(f"Prediction for {patient_name} saved successfully!")
-            else:
-                st.error("Please enter patient name and ID.")
-
-if __name__ == "__main__":
-    main()
+# -----------------------------
+# App Control
+# -----------------------------
+if st.session_state.logged_in:
+    diabetes_app()
+else:
+    login()
