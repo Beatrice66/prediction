@@ -1,68 +1,94 @@
-import sqlite3
+# app.py
+import streamlit as st
+import firebase_admin
+from firebase_admin import credentials, db
 
 # -----------------------------
-# Create tables
+# Initialize Firebase
 # -----------------------------
-def create_tables():
-    conn = sqlite3.connect("hospital.db")
-    c = conn.cursor()
-
-    # Doctor table
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS doctors(
-        name TEXT,
-        national_id TEXT PRIMARY KEY
-    )
-    """)
-
-    # Patient predictions table
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS predictions(
-        doctor TEXT,
-        patient_name TEXT,
-        patient_id TEXT,
-        date TEXT,
-        bmi REAL,
-        age INTEGER,
-        genhlth INTEGER,
-        physhlth INTEGER,
-        result REAL
-    )
-    """)
-
-    conn.commit()
-    conn.close()
+cred = credentials.Certificate("serviceAccountKey.json")
+firebase_admin.initialize_app(cred, {
+    'databaseURL': 'https://YOUR_PROJECT_ID.firebaseio.com/'  # Replace with your database URL
+})
 
 # -----------------------------
-# Add a new doctor
+# Firebase Functions
 # -----------------------------
 def add_doctor(name, national_id):
-    conn = sqlite3.connect("hospital.db")
-    c = conn.cursor()
-    c.execute("INSERT INTO doctors VALUES (?, ?)", (name, national_id))
-    conn.commit()
-    conn.close()
+    ref = db.reference('doctors')
+    ref.child(national_id).set({'name': name})
 
-# -----------------------------
-# Doctor login verification
-# -----------------------------
 def login_doctor(name, national_id):
-    conn = sqlite3.connect("hospital.db")
-    c = conn.cursor()
-    c.execute("SELECT * FROM doctors WHERE name=? AND national_id=?", (name, national_id))
-    data = c.fetchone()
-    conn.close()
-    return data
+    ref = db.reference(f'doctors/{national_id}')
+    doctor = ref.get()
+    if doctor and doctor.get('name') == name:
+        return True
+    return False
+
+def save_prediction(doctor, patient_name, patient_id, date, bmi, age, genhlth, physhlth, result):
+    ref = db.reference('predictions')
+    ref.child(patient_id).set({
+        'doctor': doctor,
+        'patient_name': patient_name,
+        'date': date,
+        'bmi': bmi,
+        'age': age,
+        'genhlth': genhlth,
+        'physhlth': physhlth,
+        'result': result
+    })
 
 # -----------------------------
-# Save a patient prediction
+# Streamlit UI
 # -----------------------------
-def save_prediction(doctor, patient_name, patient_id, date, bmi, age, genhlth, physhlth, result):
-    conn = sqlite3.connect("hospital.db")
-    c = conn.cursor()
-    c.execute(
-        "INSERT INTO predictions VALUES (?,?,?,?,?,?,?,?,?)",
-        (doctor, patient_name, patient_id, date, bmi, age, genhlth, physhlth, result)
-    )
-    conn.commit()
-    conn.close()
+def main():
+    st.title("Diabetes Health Predictor")
+    st.divider()
+
+    # --- Doctor login section ---
+    st.header("Doctor Login")
+    doctor_name = st.text_input("Doctor Name")
+    doctor_id = st.text_input("National ID")
+    
+    if st.button("Login"):
+        if login_doctor(doctor_name, doctor_id):
+            st.success("Login successful!")
+            st.session_state['doctor'] = doctor_name
+        else:
+            st.error("Invalid credentials. Please add your account first.")
+
+    st.divider()
+
+    # --- Add doctor section (optional) ---
+    st.header("Add New Doctor (Admin Only)")
+    new_doctor_name = st.text_input("New Doctor Name")
+    new_doctor_id = st.text_input("New Doctor National ID")
+    if st.button("Add Doctor"):
+        if new_doctor_name and new_doctor_id:
+            add_doctor(new_doctor_name, new_doctor_id)
+            st.success(f"Doctor {new_doctor_name} added successfully!")
+
+    st.divider()
+
+    # --- Patient prediction input ---
+    if 'doctor' in st.session_state:
+        st.header("Enter Patient Details")
+        patient_name = st.text_input("Patient Name")
+        patient_id = st.text_input("Patient ID")
+        date = st.date_input("Date")
+        bmi = st.number_input("BMI", min_value=0.0, step=0.1)
+        age = st.number_input("Age", min_value=0, step=1)
+        genhlth = st.slider("General Health (1-5)", 1, 5)
+        physhlth = st.slider("Physical Health (0-30)", 0, 30)
+        result = st.number_input("Predicted Diabetes Risk (0-1)", min_value=0.0, max_value=1.0, step=0.01)
+
+        if st.button("Save Prediction"):
+            if patient_name and patient_id:
+                save_prediction(st.session_state['doctor'], patient_name, patient_id, str(date),
+                                bmi, age, genhlth, physhlth, result)
+                st.success(f"Prediction for {patient_name} saved successfully!")
+            else:
+                st.error("Please enter patient name and ID.")
+
+if __name__ == "__main__":
+    main()
