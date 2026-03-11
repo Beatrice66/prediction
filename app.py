@@ -191,6 +191,26 @@ def diabetes_app():
         prediction = model.predict(data, verbose=0)
 
         risk_score = float(prediction[0][0])
+        patient_data = {
+    "doctor": st.session_state.doctor,
+    "patient_name": patient_name,
+    "patient_id": patient_id,
+    "visit_date": str(visit_date),
+    "BMI": user_inputs[0],
+    "Age": user_inputs[1],
+    "GenHlth": user_inputs[2],
+    "PhysHlth": user_inputs[3],
+    "HighBP": user_inputs[4],
+    "HighChol": user_inputs[5],
+    "PhysActivity": user_inputs[6],
+    "HeartDiseaseorAttack": user_inputs[7],
+    "DiffWalk": user_inputs[8],
+    "Smoker": user_inputs[9],
+    "risk_score": risk_score
+}
+
+db.collection("patients").add(patient_data)
+
 
         st.divider()
 
