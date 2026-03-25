@@ -78,27 +78,32 @@ def fetch_predictions():
 # -----------------------------
 @st.cache_resource
 def load_artifacts():
-    model_path = "final_diabetes_model.h5"
+    import os
+    import gdown
+    from tensorflow.keras.models import Model
+    from tensorflow.keras.layers import Input, Dense, Dropout
 
-    # REMOVE OLD WRONG FILE
-    if os.path.exists("final_diabetes_model.keras"):
-        os.remove("final_diabetes_model.keras")
+    weights_path = "model_weights.h5"
 
-    # DOWNLOAD MODEL
-    if not os.path.exists(model_path):
-        url = "https://drive.google.com/uc?id=13eu-b8zYlzwmFkC1N5lxXUBU3SJg8adI"
-        gdown.download(url, model_path, quiet=False, fuzzy=True)
+    if not os.path.exists(weights_path):
+        url = "https://drive.google.com/file/d/1I8JpIQxScRt1JbqERv43y4T5Mkctcu16/view?usp=drive_link"
+        gdown.download(f"https://drive.google.com/uc?id={url}", weights_path, quiet=False)
 
-    try:
-        model = load_model(model_path, compile=False)
-        return model
-    except Exception as e:
-        st.error(f"Model Load Error: {e}")
-        return None
+    # 🔥 REBUILD MODEL ARCHITECTURE
+    inputs = Input(shape=(10,))
+    x = Dense(5, activation="relu")(inputs)
 
-model = load_artifacts()
-if model is None:
-    st.stop()
+    x = Dense(32, activation="relu")(x)
+    x = Dropout(0.3)(x)
+    x = Dense(16, activation="relu")(x)
+    outputs = Dense(1, activation="sigmoid")(x)
+
+    model = Model(inputs, outputs)
+
+    # LOAD WEIGHTS
+    model.load_weights(weights_path)
+
+    return model
 
 # -----------------------------
 # SESSION STATE
