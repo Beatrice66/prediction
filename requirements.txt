@@ -1,6 +1,8 @@
 streamlit
-tensorflow==2.13.0
 numpy
 pandas
-psycopg2-binary
+tensorflow
+scikit-learn
+joblib
 gdown
+psycopg2-binary
