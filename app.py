@@ -10,13 +10,11 @@ import pandas as pd
 # DATABASE CONNECTION
 # -----------------------------
 def get_connection():
-    # Connect to Supabase PostgreSQL using Streamlit secrets
     conn = psycopg2.connect(
-        host=st.secrets["DB_HOST"],
-        database=st.secrets["DB_NAME"],
-        user=st.secrets["DB_USER"],
-        password=st.secrets["DB_PASSWORD"],
-        port=5432
+        host="localhost",
+        database="diabetes_app",
+        user="postgres",
+        password="38744474"  # <-- your PostgreSQL password
     )
     return conn
 
@@ -67,7 +65,7 @@ def fetch_predictions():
         return []
 
 # -----------------------------
-# LOAD ML MODELS
+# Load models
 # -----------------------------
 @st.cache_resource
 def load_artifacts():
@@ -85,7 +83,7 @@ if model is None:
     st.stop()
 
 # -----------------------------
-# SESSION STATE
+# Session state
 # -----------------------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -96,7 +94,7 @@ if "logged_in" not in st.session_state:
 def login_page():
     st.title("🔐 Doctor Login")
     doctor_name = st.text_input("Doctor Full Name")
-    password = st.text_input("Password", type="password")  # optional
+    password = st.text_input("Password", type="password")
     if st.button("Login"):
         if doctor_name.strip() == "":
             st.warning("Please enter your name")
@@ -172,7 +170,7 @@ def prediction_page():
                 st.success(f"✅ Low Diabetes Risk ({risk_score*100:.2f}%)")
             st.caption("This is an AI-assisted prediction, not a medical diagnosis.")
             
-            # Save prediction to Supabase
+            # Save prediction to database
             db_data = (
                 st.session_state.doctor,
                 patient_name,
