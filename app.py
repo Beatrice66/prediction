@@ -10,18 +10,19 @@ import gdown
 # -----------------------------
 # DATABASE CONNECTION
 # -----------------------------
-def get_connection():
+@st.cache_resource
+def load_artifacts():
+    model_path = "final_diabetes_model.h5"
+
+    if not os.path.exists(model_path):
+        url = "https://drive.google.com/uc?id=13eu-b8zYlzwmFkC1N5lxXUBU3SJg8adI"
+        gdown.download(url, model_path, quiet=False, fuzzy=True)
+
     try:
-        conn = psycopg2.connect(
-            host=os.getenv("DB_HOST"),
-            database=os.getenv("DB_NAME"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            port=os.getenv("DB_PORT", "5432")
-        )
-        return conn
+        model = load_model(model_path, compile=False)
+        return model
     except Exception as e:
-        st.error(f"Database Connection Error: {e}")
+        st.error(f"Model Load Error: {e}")
         return None
 
 # -----------------------------
