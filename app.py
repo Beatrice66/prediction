@@ -1,57 +1,222 @@
+import psycopg2
 import streamlit as st
 import numpy as np
-import keras
+from tensorflow.keras.models import load_model
+from datetime import datetime
+import pandas as pd
 import os
 
-st.set_page_config(page_title="Diabetes Health Predictor", layout="centered")
+# -----------------------------
+# DATABASE CONNECTION
+# -----------------------------
+def get_connection():
+    try:
+        conn = psycopg2.connect(
+            host=os.getenv("DB_HOST"),
+            database=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            port=os.getenv("DB_PORT", "5432")
+        )
+        return conn
+    except Exception as e:
+        st.error(f"Database Connection Error: {e}")
+        return None
 
-st.title("🩺 Health Indicator Assessment")
-st.write("Please provide the following health information for prediction.")
+# -----------------------------
+# SAVE PREDICTION
+# -----------------------------
+def save_prediction(data):
+    conn = get_connection()
+    if conn is None:
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+        INSERT INTO predictions(
+            doctor_name, patient_name, patient_id,
+            bmi, age, genhlth, physhlth,
+            highbp, highchol, physactivity,
+            heartdiseaseorattack, diffwalk, smoker,
+            risk_score, prediction_date
+        )
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """, data)
 
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        st.error(f"Database Error: {e}")
+
+# -----------------------------
+# FETCH HISTORY
+# -----------------------------
+def fetch_predictions():
+    conn = get_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT doctor_name, patient_name, patient_id, bmi, age, genhlth, physhlth,
+                   highbp, highchol, physactivity, heartdiseaseorattack, diffwalk, smoker,
+                   risk_score, prediction_date
+            FROM predictions
+            ORDER BY prediction_date DESC
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return rows
+    except Exception as e:
+        st.error(f"Fetch Error: {e}")
+        return []
+
+# -----------------------------
+# LOAD MODEL (COMBINED)
+# -----------------------------
 @st.cache_resource
-def load_diabetes_model():
-    # Loading the functional_16 model saved on 2026-03-05
-    return keras.models.load_model('diabetes_full_model.keras')
+def load_artifacts():
+    try:
+        model = load_model("final_diabetes_model.keras")
+        return model
+    except Exception as e:
+        st.error(f"Model Load Error: {e}")
+        return None
 
-model = load_diabetes_model()
+model = load_artifacts()
+if model is None:
+    st.stop()
 
-# These match your 10 features in the correct order for the model input
-feature_names = [
-    "BMI", "Age", "GenHlth", "PhysHlth", "HighBP", 
-    "HighChol", "PhysActivity", "HeartDiseaseorAttack", 
-    "DiffWalk", "Smoker"
-]
+# -----------------------------
+# SESSION STATE
+# -----------------------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 
-if model:
-    with st.form("health_form"):
-        cols = st.columns(2)
-        user_inputs = []
-        
-        for i, name in enumerate(feature_names):
-            with cols[i % 2]:
-                # Using selectboxes for binary (0/1) features to make it user-friendly
-                if name in ["HighBP", "HighChol", "PhysActivity", "HeartDiseaseorAttack", "DiffWalk", "Smoker"]:
-                    val = st.selectbox(f"{name}", options=[0, 1], format_func=lambda x: "Yes (1)" if x == 1 else "No (0)")
-                else:
-                    # For numerical/scale features like BMI, Age, GenHlth, PhysHlth
-                    val = st.number_input(f"{name}", value=0.0, step=1.0)
-                
-                user_inputs.append(val)
-        
-        submit = st.form_submit_button("Predict Diabetes Risk")
+# -----------------------------
+# LOGIN PAGE
+# -----------------------------
+def login_page():
+    st.title("🔐 Doctor Login")
+    doctor_name = st.text_input("Doctor Full Name")
+    password = st.text_input("Password", type="password")
 
-    if submit:
-        # Reshape to (1, 10) as required by input_layer_2
-        data = np.array([user_inputs], dtype="float32")
-        prediction = model.predict(data)
-        risk_score = float(prediction[0][0])
-        
-        st.divider()
-        if risk_score > 0.5:
-            st.error(f"### High Risk Detected")
-            st.write(f"Probability: **{risk_score*100:.1f}%**")
+    if st.button("Login"):
+        if doctor_name.strip() == "":
+            st.warning("Please enter your name")
         else:
-            st.success(f"### Low Risk Detected")
-            st.write(f"Probability: **{risk_score*100:.1f}%**")
+            st.session_state.logged_in = True
+            st.session_state.doctor = doctor_name
+            st.rerun()
 
-        st.caption("Disclaimer: This model uses a neural network with a 0.3 dropout rate for estimation.")
+# -----------------------------
+# MAIN APP
+# -----------------------------
+def prediction_page():
+    st.title("🩺 Diabetes Risk Predictor")
+    st.write(f"👨‍⚕️ Logged in as: **{st.session_state.doctor}**")
+
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.rerun()
+
+    st.divider()
+
+    # Patient Info
+    st.subheader("📋 Patient Information")
+    patient_name = st.text_input("Patient Full Name")
+    patient_id = st.text_input("Patient ID")
+    current_date = datetime.now()
+
+    st.write(f"Date: **{current_date.strftime('%Y-%m-%d')}**")
+    st.divider()
+
+    # Inputs
+    st.subheader("🧾 Health Data")
+
+    features = [
+        "BMI","Age","GenHlth","PhysHlth","HighBP",
+        "HighChol","PhysActivity","HeartDiseaseorAttack",
+        "DiffWalk","Smoker"
+    ]
+
+    inputs = []
+    col1, col2 = st.columns(2)
+
+    for i, feature in enumerate(features):
+        with (col1 if i % 2 == 0 else col2):
+            if feature == "BMI":
+                val = st.number_input(feature, 10.0, 70.0, 25.0)
+            elif feature == "Age":
+                val = st.number_input(feature, 1, 120, 30)
+            elif feature == "GenHlth":
+                val = st.slider(feature, 1, 5, 3)
+            elif feature == "PhysHlth":
+                val = st.slider(feature, 0, 30, 0)
+            else:
+                val = st.selectbox(feature, [0,1], format_func=lambda x: "Yes" if x==1 else "No")
+            inputs.append(val)
+
+    # Prediction
+    if st.button("Predict Diabetes Risk"):
+
+        if patient_name == "" or patient_id == "":
+            st.warning("Enter patient details")
+            return
+
+        try:
+            data = np.array([inputs], dtype=float)
+
+            prediction = model.predict(data)
+            risk_score = float(prediction[0][0])
+
+            st.divider()
+            st.subheader("📊 Result")
+
+            if risk_score > 0.5:
+                st.error(f"⚠️ High Risk ({risk_score*100:.2f}%)")
+            else:
+                st.success(f"✅ Low Risk ({risk_score*100:.2f}%)")
+
+            # Save to DB
+            db_data = (
+                st.session_state.doctor,
+                patient_name,
+                patient_id,
+                *inputs,
+                risk_score,
+                current_date
+            )
+
+            save_prediction(db_data)
+
+        except Exception as e:
+            st.error(f"Prediction Error: {e}")
+
+    # History
+    st.divider()
+    st.subheader("📂 Prediction History")
+
+    if st.button("Load History"):
+        data = fetch_predictions()
+
+        if data:
+            df = pd.DataFrame(data, columns=[
+                "Doctor","Patient","ID","BMI","Age","GenHlth",
+                "PhysHlth","HighBP","HighChol","PhysActivity",
+                "HeartDisease","DiffWalk","Smoker","Risk","Date"
+            ])
+            df["Risk"] = df["Risk"].apply(lambda x: f"{x*100:.2f}%")
+            st.dataframe(df)
+        else:
+            st.info("No records found")
+
+# -----------------------------
+# APP CONTROL
+# -----------------------------
+if st.session_state.logged_in:
+    prediction_page()
+else:
+    login_page()
