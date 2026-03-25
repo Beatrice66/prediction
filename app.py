@@ -5,6 +5,7 @@ from tensorflow.keras.models import load_model
 from datetime import datetime
 import pandas as pd
 import os
+import gdown
 
 # -----------------------------
 # DATABASE CONNECTION
@@ -74,12 +75,19 @@ def fetch_predictions():
         return []
 
 # -----------------------------
-# LOAD MODEL
+# LOAD MODEL FROM GOOGLE DRIVE
 # -----------------------------
 @st.cache_resource
 def load_artifacts():
+    model_path = "final_diabetes_model.keras"
+
+    # Download if not present
+    if not os.path.exists(model_path):
+        url = "https://drive.google.com/uc?id=1rdiFHg7thjaxKm4xY0d4kyFkdf48Kkux"
+        gdown.download(url, model_path, quiet=False)
+
     try:
-        model = load_model("final_diabetes_model.keras")
+        model = load_model(model_path)
         return model
     except Exception as e:
         st.error(f"Model Load Error: {e}")
@@ -174,9 +182,6 @@ def prediction_page():
 
             st.divider()
             st.subheader("📊 Prediction Result")
-
-            st.write(f"Patient: **{patient_name}**")
-            st.write(f"Patient ID: **{patient_id}**")
 
             if risk_score > 0.5:
                 st.error(f"⚠️ High Diabetes Risk ({risk_score*100:.2f}%)")
