@@ -68,22 +68,21 @@ def fetch_predictions():
         return []
 
 # -----------------------------
-# LOAD MODELS
+# LOAD MODEL + SCALER ONLY
 # -----------------------------
 @st.cache_resource
 def load_artifacts():
     try:
-        model = load_model("diabetes_full_model.keras")   # expects 5 features
-        encoder = load_model("encoder_model.keras")       # outputs 5 features
+        model = load_model("diabetes_full_model.keras")  # expects 10 features
         scaler = joblib.load("scaler.pkl")
-        return model, encoder, scaler
+        return model, scaler
     except Exception as e:
         st.error(f"Error loading files: {e}")
-        return None, None, None
+        return None, None
 
-model, encoder, scaler = load_artifacts()
+model, scaler = load_artifacts()
 
-if model is None or encoder is None:
+if model is None:
     st.stop()
 
 # -----------------------------
@@ -159,7 +158,7 @@ def prediction_page():
             inputs.append(val)
 
     # -----------------------------
-    # PREDICTION
+    # PREDICTION (FIXED)
     # -----------------------------
     if st.button("Predict Diabetes Risk"):
 
@@ -170,19 +169,12 @@ def prediction_page():
         try:
             data = np.array([inputs], dtype=float)
 
-            # Step 1: Scale
+            # Scale ONLY
             scaled = scaler.transform(data)
 
-            # Step 2: Encode (10 → 5)
-            encoded = encoder.predict(scaled)
+            # Predict directly (NO ENCODER)
+            prediction = model.predict(scaled)
 
-            # DEBUG (optional)
-            st.write("Scaled shape:", scaled.shape)
-            st.write("Encoded shape:", encoded.shape)
-            st.write("Model expects:", model.input_shape)
-
-            # Step 3: Predict
-            prediction = model.predict(encoded)
             risk_score = float(prediction[0][0])
 
             # -----------------------------
