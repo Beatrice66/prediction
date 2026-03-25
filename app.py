@@ -25,7 +25,6 @@ def save_prediction(data):
     try:
         conn = get_connection()
         cur = conn.cursor()
-
         cur.execute("""
         INSERT INTO predictions(
             doctor_name, patient_name, patient_id,
@@ -36,7 +35,6 @@ def save_prediction(data):
         )
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, data)
-
         conn.commit()
         cur.close()
         conn.close()
@@ -50,7 +48,6 @@ def fetch_predictions():
     try:
         conn = get_connection()
         cur = conn.cursor()
-
         cur.execute("""
         SELECT doctor_name, patient_name, patient_id, bmi, age,
                genhlth, physhlth, highbp, highchol, physactivity,
@@ -59,7 +56,6 @@ def fetch_predictions():
         FROM predictions
         ORDER BY prediction_date DESC
         """)
-
         rows = cur.fetchall()
         cur.close()
         conn.close()
@@ -75,14 +71,13 @@ def fetch_predictions():
 def load_models():
     try:
         model = load_model("diabetes_full_model.keras")
-        encoder = load_model("encoder_model.keras")
         scaler = joblib.load("scaler.pkl")
-        return model, encoder, scaler
+        return model, scaler
     except Exception as e:
         st.error(f"Model loading error: {e}")
-        return None, None, None
+        return None, None
 
-model, encoder, scaler = load_models()
+model, scaler = load_models()
 if model is None:
     st.stop()
 
@@ -157,15 +152,9 @@ def prediction_page():
             scaled = scaler.transform(features)
 
             # -----------------------------
-            # ENCODE FEATURES
-            # -----------------------------
-            encoded = encoder.predict(scaled)
-            encoded = np.array(encoded)
-
-            # -----------------------------
             # MODEL PREDICTION
             # -----------------------------
-            prediction = model.predict(encoded)
+            prediction = model.predict(scaled)
             risk_score = float(prediction[0][0])
 
             st.subheader("Prediction Result")
