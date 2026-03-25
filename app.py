@@ -1,12 +1,12 @@
 import streamlit as st
 import numpy as np
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Dense, Dropout
-from datetime import datetime
 import pandas as pd
+from datetime import datetime
 import os
-import gdown
 import psycopg2
+import joblib
+import gdown
+from tensorflow.keras.models import load_model
 
 # -----------------------------
 # DATABASE CONNECTION
@@ -75,39 +75,45 @@ def fetch_predictions():
         return []
 
 # -----------------------------
-# LOAD MODEL FROM GOOGLE DRIVE
+# LOAD FULL PIPELINE
 # -----------------------------
 @st.cache_resource
-def load_model():
-    weights_path = "model.weights.h5"
+def load_pipeline():
+    try:
+        # File names
+        scaler_path = "scaler.pkl"
+        encoder_path = "encoder_model.keras"
+        model_path = "diabetes_full_model.keras"
 
-    # ✅ Correct file ID
-    file_id = "1I8JpIQxScRt1JbqERv43y4T5Mkctcu16"
+        # 👉 OPTIONAL: download if not present
+        # Replace with your file IDs if needed
+        # gdown.download("LINK", scaler_path)
+        # gdown.download("LINK", encoder_path)
+        # gdown.download("LINK", model_path)
 
-    # Download if not exists
-    if not os.path.exists(weights_path):
-        with st.spinner("Downloading model..."):
-            gdown.download(
-                f"https://drive.google.com/uc?id={file_id}",
-                weights_path,
-                quiet=False
-            )
+        # Check files exist
+        if not os.path.exists(scaler_path):
+            st.error("Missing scaler.pkl")
+            return None, None, None
 
-    # 🔥 Rebuild model architecture (MUST match training)
-    inputs = Input(shape=(10,))
-    x = Dense(5, activation="relu")(inputs)
+        if not os.path.exists(encoder_path):
+            st.error("Missing encoder_model.keras")
+            return None, None, None
 
-    x = Dense(32, activation="relu")(x)
-    x = Dropout(0.3)(x)
-    x = Dense(16, activation="relu")(x)
-    outputs = Dense(1, activation="sigmoid")(x)
+        if not os.path.exists(model_path):
+            st.error("Missing diabetes_full_model.keras")
+            return None, None, None
 
-    model = Model(inputs, outputs)
+        # Load components
+        scaler = joblib.load(scaler_path)
+        encoder = load_model(encoder_path)
+        model = load_model(model_path)
 
-    # Load weights
-    model.load_weights(weights_path)
+        return scaler, encoder, model
 
-    return model
+    except Exception as e:
+        st.error(f"Model Loading Error: {e}")
+        return None, None, None
 
 # -----------------------------
 # SESSION STATE
@@ -137,8 +143,10 @@ def login_page():
 def prediction_page():
     st.title("🩺 Diabetes Risk Predictor")
 
-    # ✅ LOAD MODEL HERE (FIXED)
-    model = load_model()
+    scaler, encoder, model = load_pipeline()
+
+    if model is None:
+        st.stop()
 
     st.write(f"👨‍⚕️ Logged in as: **{st.session_state.doctor}**")
 
@@ -157,7 +165,7 @@ def prediction_page():
     st.write(f"Date: **{current_date.strftime('%Y-%m-%d')}**")
     st.divider()
 
-    # Health Inputs
+    # Inputs
     st.subheader("🧾 Health Data")
 
     features = [
@@ -193,7 +201,12 @@ def prediction_page():
 
         try:
             data = np.array([inputs], dtype=float)
-            prediction = model.predict(data)
+
+            # ✅ FULL PIPELINE
+            data_scaled = scaler.transform(data)
+            data_encoded = encoder.predict(data_scaled)
+            prediction = model.predict(data_encoded)
+
             risk_score = float(prediction[0][0])
 
             st.divider()
