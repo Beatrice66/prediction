@@ -1,4 +1,3 @@
-import psycopg2
 import streamlit as st
 import numpy as np
 from tensorflow.keras.models import load_model
@@ -6,23 +5,23 @@ from datetime import datetime
 import pandas as pd
 import os
 import gdown
+import psycopg2
 
 # -----------------------------
 # DATABASE CONNECTION
 # -----------------------------
-@st.cache_resource
-def load_artifacts():
-    model_path = "final_diabetes_model.h5"
-
-    if not os.path.exists(model_path):
-        url = "https://drive.google.com/file/d/13eu-b8zYlzwmFkC1N5lxXUBU3SJg8adI/view?usp=drive_link"
-        gdown.download(url, model_path, quiet=False, fuzzy=True)
-
+def get_connection():
     try:
-        model = load_model(model_path, compile=False)
-        return model
+        conn = psycopg2.connect(
+            host=os.getenv("DB_HOST"),
+            database=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            port=os.getenv("DB_PORT", "5432")
+        )
+        return conn
     except Exception as e:
-        st.error(f"Model Load Error: {e}")
+        st.error(f"Database Connection Error: {e}")
         return None
 
 # -----------------------------
@@ -44,7 +43,6 @@ def save_prediction(data):
         )
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, data)
-
         conn.commit()
         cur.close()
         conn.close()
@@ -80,15 +78,19 @@ def fetch_predictions():
 # -----------------------------
 @st.cache_resource
 def load_artifacts():
-    model_path = "final_diabetes_model.keras"
+    model_path = "final_diabetes_model.h5"
 
-    # Download if not present
+    # REMOVE OLD WRONG FILE
+    if os.path.exists("final_diabetes_model.keras"):
+        os.remove("final_diabetes_model.keras")
+
+    # DOWNLOAD MODEL
     if not os.path.exists(model_path):
-        url = "https://drive.google.com/uc?id=1rdiFHg7thjaxKm4xY0d4kyFkdf48Kkux"
-        gdown.download(url, model_path, quiet=False)
+        url = "https://drive.google.com/uc?id=13eu-b8zYlzwmFkC1N5lxXUBU3SJg8adI"
+        gdown.download(url, model_path, quiet=False, fuzzy=True)
 
     try:
-        model = load_model(model_path)
+        model = load_model(model_path, compile=False)
         return model
     except Exception as e:
         st.error(f"Model Load Error: {e}")
@@ -177,7 +179,6 @@ def prediction_page():
 
         try:
             data = np.array([inputs], dtype=float)
-
             prediction = model.predict(data)
             risk_score = float(prediction[0][0])
 
@@ -191,7 +192,6 @@ def prediction_page():
 
             st.caption("⚠️ AI-assisted prediction — not a medical diagnosis")
 
-            # Save to DB
             db_data = (
                 st.session_state.doctor,
                 patient_name,
