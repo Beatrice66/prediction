@@ -1,13 +1,5 @@
 streamlit
-psycopg2-binary
-pandas
-numpy
-scikit-learn
-tensorflow
-matplotlib
-seabornstreamlit
-tensorflow==2.15.0
-keras==2.15.0
+tensorflow==2.13.0
 numpy
 pandas
 psycopg2-binary
