@@ -74,7 +74,7 @@ def fetch_predictions():
         return []
 
 # -----------------------------
-# LOAD MODEL (COMBINED)
+# LOAD MODEL
 # -----------------------------
 @st.cache_resource
 def load_artifacts():
@@ -133,7 +133,7 @@ def prediction_page():
     st.write(f"Date: **{current_date.strftime('%Y-%m-%d')}**")
     st.divider()
 
-    # Inputs
+    # Health Inputs
     st.subheader("🧾 Health Data")
 
     features = [
@@ -163,7 +163,7 @@ def prediction_page():
     if st.button("Predict Diabetes Risk"):
 
         if patient_name == "" or patient_id == "":
-            st.warning("Enter patient details")
+            st.warning("Please enter patient details")
             return
 
         try:
@@ -173,12 +173,17 @@ def prediction_page():
             risk_score = float(prediction[0][0])
 
             st.divider()
-            st.subheader("📊 Result")
+            st.subheader("📊 Prediction Result")
+
+            st.write(f"Patient: **{patient_name}**")
+            st.write(f"Patient ID: **{patient_id}**")
 
             if risk_score > 0.5:
-                st.error(f"⚠️ High Risk ({risk_score*100:.2f}%)")
+                st.error(f"⚠️ High Diabetes Risk ({risk_score*100:.2f}%)")
             else:
-                st.success(f"✅ Low Risk ({risk_score*100:.2f}%)")
+                st.success(f"✅ Low Diabetes Risk ({risk_score*100:.2f}%)")
+
+            st.caption("⚠️ AI-assisted prediction — not a medical diagnosis")
 
             # Save to DB
             db_data = (
@@ -199,7 +204,7 @@ def prediction_page():
     st.divider()
     st.subheader("📂 Prediction History")
 
-    if st.button("Load History"):
+    if st.button("Load Prediction History"):
         data = fetch_predictions()
 
         if data:
@@ -211,7 +216,7 @@ def prediction_page():
             df["Risk"] = df["Risk"].apply(lambda x: f"{x*100:.2f}%")
             st.dataframe(df)
         else:
-            st.info("No records found")
+            st.info("No predictions found.")
 
 # -----------------------------
 # APP CONTROL
