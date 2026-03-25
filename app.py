@@ -15,7 +15,7 @@ def load_artifacts():
     model_path = "final_diabetes_model.h5"
 
     if not os.path.exists(model_path):
-        url = "https://drive.google.com/uc?id=13eu-b8zYlzwmFkC1N5lxXUBU3SJg8adI"
+        url = "https://drive.google.com/file/d/13eu-b8zYlzwmFkC1N5lxXUBU3SJg8adI/view?usp=drive_link"
         gdown.download(url, model_path, quiet=False, fuzzy=True)
 
     try:
