@@ -1,6 +1,7 @@
 import streamlit as st
 import numpy as np
-from tensorflow.keras.models import load_model
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Dense, Dropout
 from datetime import datetime
 import pandas as pd
 import os
@@ -77,19 +78,22 @@ def fetch_predictions():
 # LOAD MODEL FROM GOOGLE DRIVE
 # -----------------------------
 @st.cache_resource
-def load_artifacts():
-    import os
-    import gdown
-    from tensorflow.keras.models import Model
-    from tensorflow.keras.layers import Input, Dense, Dropout
+def load_model():
+    weights_path = "model.weights.h5"
 
-    weights_path = "model_weights.h5"
+    # ✅ Correct file ID
+    file_id = "1I8JpIQxScRt1JbqERv43y4T5Mkctcu16"
 
+    # Download if not exists
     if not os.path.exists(weights_path):
-        url = "https://drive.google.com/file/d/1I8JpIQxScRt1JbqERv43y4T5Mkctcu16/view?usp=drive_link"
-        gdown.download(f"https://drive.google.com/uc?id={url}", weights_path, quiet=False)
+        with st.spinner("Downloading model..."):
+            gdown.download(
+                f"https://drive.google.com/uc?id={file_id}",
+                weights_path,
+                quiet=False
+            )
 
-    # 🔥 REBUILD MODEL ARCHITECTURE
+    # 🔥 Rebuild model architecture (MUST match training)
     inputs = Input(shape=(10,))
     x = Dense(5, activation="relu")(inputs)
 
@@ -100,7 +104,7 @@ def load_artifacts():
 
     model = Model(inputs, outputs)
 
-    # LOAD WEIGHTS
+    # Load weights
     model.load_weights(weights_path)
 
     return model
@@ -132,6 +136,10 @@ def login_page():
 # -----------------------------
 def prediction_page():
     st.title("🩺 Diabetes Risk Predictor")
+
+    # ✅ LOAD MODEL HERE (FIXED)
+    model = load_model()
+
     st.write(f"👨‍⚕️ Logged in as: **{st.session_state.doctor}**")
 
     if st.button("Logout"):
@@ -172,7 +180,8 @@ def prediction_page():
             elif feature == "PhysHlth":
                 val = st.slider(feature, 0, 30, 0)
             else:
-                val = st.selectbox(feature, [0,1], format_func=lambda x: "Yes" if x==1 else "No")
+                val = st.selectbox(feature, [0,1],
+                                   format_func=lambda x: "Yes" if x==1 else "No")
             inputs.append(val)
 
     # Prediction
