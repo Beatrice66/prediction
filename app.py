@@ -1,7 +1,6 @@
 import psycopg2
 import streamlit as st
 import numpy as np
-import joblib
 from tensorflow.keras.models import load_model
 from datetime import datetime
 import pandas as pd
@@ -12,10 +11,10 @@ import pandas as pd
 def get_connection():
     try:
         conn = psycopg2.connect(
-            host="localhost",          # Change if online DB host is different
+            host="localhost",
             database="diabetes_app",
             user="postgres",
-            password="38744474"        # Replace with secure method for online deployment
+            password="38744474"  # Replace with secure method for online deployment
         )
         return conn
     except Exception as e:
@@ -69,19 +68,18 @@ def fetch_predictions():
         return []
 
 # -----------------------------
-# Load model and scaler
+# Load model
 # -----------------------------
 @st.cache_resource
-def load_artifacts():
+def load_model_artifact():
     try:
         model = load_model("diabetes_full_model.keras")
-        scaler = joblib.load("scaler.pkl")
-        return model, scaler
+        return model
     except Exception as e:
-        st.error(f"Error loading files: {e}")
-        return None, None
+        st.error(f"Error loading model: {e}")
+        return None
 
-model, scaler = load_artifacts()
+model = load_model_artifact()
 if model is None:
     st.stop()
 
@@ -156,12 +154,9 @@ def prediction_page():
             st.warning("Please enter patient name and ID")
             return
         try:
-            # Scale input
+            # Predict directly without scaling
             data = np.array([inputs], dtype=float)
-            scaled = scaler.transform(data)
-            
-            # Predict directly (encoder removed)
-            prediction = model.predict(scaled)
+            prediction = model.predict(data)
             risk_score = float(prediction[0][0])
             
             st.divider()
