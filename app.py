@@ -175,32 +175,40 @@ def prediction_page():
             return
 
         try:
+# -----------------------------
+            try:
 
-            # -----------------------------
-            # CREATE INPUT ARRAY
-            # -----------------------------
-            features = np.array([
-                bmi, age, genhlth, physhlth,
-                highbp, highchol, physactivity,
-                heartdisease, diffwalk, smoker
-            ], dtype=float)
+    # -----------------------------
+    # CREATE INPUT ARRAY
+    # -----------------------------
+    features = np.array([
+        bmi, age, genhlth, physhlth,
+        highbp, highchol, physactivity,
+        heartdisease, diffwalk, smoker
+    ], dtype=float)
 
-            # FORCE CORRECT SHAPE
-            features = features.reshape(1,10)
+    # Force correct shape
+    features = features.reshape(1, 10)
 
-            # SCALE FEATURES
-            scaled = scaler.transform(features)
+    # -----------------------------
+    # SCALE FEATURES
+    # -----------------------------
+    scaled = scaler.transform(features)
 
-            # -----------------------------
-            # ENCODER STEP
-            # -----------------------------
-            encoded = encoder.predict(scaled)
+    # -----------------------------
+    # ENCODER
+    # -----------------------------
+    encoded = encoder.predict(scaled)
 
-            # FIX SHAPE IF NEEDED
-            encoded = np.array(encoded)
+    # Convert to numpy
+    encoded = np.array(encoded)
 
-            if len(encoded.shape) == 1:
-                encoded = encoded.reshape(1,-1)
+    # -----------------------------
+    # FIX SHAPE ISSUE
+    # -----------------------------
+    if encoded.shape[1] != 10:
+
+        # If encoder
 
             # -----------------------------
             # MODEL PREDICTION
