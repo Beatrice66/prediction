@@ -5,4 +5,10 @@ numpy
 scikit-learn
 tensorflow
 matplotlib
-seaborn
+seabornstreamlit
+tensorflow==2.15.0
+keras==2.15.0
+numpy
+pandas
+psycopg2-binary
+gdown
