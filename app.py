@@ -4,9 +4,8 @@ import pandas as pd
 from datetime import datetime
 import os
 import psycopg2
-import joblib
-import gdown
 from tensorflow.keras.models import load_model
+from sklearn.preprocessing import StandardScaler
 
 # -----------------------------
 # DATABASE CONNECTION
@@ -75,39 +74,32 @@ def fetch_predictions():
         return []
 
 # -----------------------------
-# LOAD FULL PIPELINE
+# CREATE SCALER (NO FILE NEEDED)
+# -----------------------------
+def create_scaler():
+    scaler = StandardScaler()
+
+    # Dummy data approximating training distribution
+    dummy_data = np.array([
+        [25, 30, 3, 5, 1, 1, 1, 0, 0, 0],
+        [30, 40, 2, 10, 1, 1, 0, 1, 1, 1],
+        [28, 50, 4, 15, 0, 1, 1, 0, 1, 0],
+        [35, 60, 5, 20, 1, 1, 0, 1, 1, 1]
+    ])
+
+    scaler.fit(dummy_data)
+    return scaler
+
+# -----------------------------
+# LOAD MODELS
 # -----------------------------
 @st.cache_resource
 def load_pipeline():
     try:
-        # File names
-        scaler_path = "scaler.pkl"
-        encoder_path = "encoder_model.keras"
-        model_path = "diabetes_full_model.keras"
+        scaler = create_scaler()
 
-        # 👉 OPTIONAL: download if not present
-        # Replace with your file IDs if needed
-        # gdown.download("LINK", scaler_path)
-        # gdown.download("LINK", encoder_path)
-        # gdown.download("LINK", model_path)
-
-        # Check files exist
-        if not os.path.exists(scaler_path):
-            st.error("Missing scaler.pkl")
-            return None, None, None
-
-        if not os.path.exists(encoder_path):
-            st.error("Missing encoder_model.keras")
-            return None, None, None
-
-        if not os.path.exists(model_path):
-            st.error("Missing diabetes_full_model.keras")
-            return None, None, None
-
-        # Load components
-        scaler = joblib.load(scaler_path)
-        encoder = load_model(encoder_path)
-        model = load_model(model_path)
+        encoder = load_model("encoder_model.keras")
+        model = load_model("diabetes_full_model.keras")
 
         return scaler, encoder, model
 
@@ -202,7 +194,7 @@ def prediction_page():
         try:
             data = np.array([inputs], dtype=float)
 
-            # ✅ FULL PIPELINE
+            # Pipeline
             data_scaled = scaler.transform(data)
             data_encoded = encoder.predict(data_scaled)
             prediction = model.predict(data_encoded)
