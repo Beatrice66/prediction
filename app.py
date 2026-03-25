@@ -24,6 +24,7 @@ def get_connection():
 # SAVE PREDICTION
 # -----------------------------
 def save_prediction(data):
+
     try:
         conn = get_connection()
         cur = conn.cursor()
@@ -51,6 +52,7 @@ def save_prediction(data):
 # LOAD HISTORY
 # -----------------------------
 def fetch_predictions():
+
     try:
         conn = get_connection()
         cur = conn.cursor()
@@ -77,27 +79,31 @@ def fetch_predictions():
 
 
 # -----------------------------
-# LOAD ML MODEL
+# LOAD ML FILES
 # -----------------------------
 @st.cache_resource
-def load_model_artifacts():
+def load_models():
+
     try:
         model = load_model("diabetes_full_model.keras")
+        encoder = load_model("encoder_model.keras")
         scaler = joblib.load("scaler.pkl")
-        return model, scaler
+
+        return model, encoder, scaler
+
     except Exception as e:
         st.error(f"Model loading error: {e}")
-        return None, None
+        return None, None, None
 
 
-model, scaler = load_model_artifacts()
+model, encoder, scaler = load_models()
 
 if model is None:
     st.stop()
 
 
 # -----------------------------
-# SESSION
+# SESSION STATE
 # -----------------------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -115,7 +121,7 @@ def login_page():
     if st.button("Login"):
 
         if doctor.strip() == "":
-            st.warning("Please enter doctor name")
+            st.warning("Enter doctor name")
 
         else:
             st.session_state.logged_in = True
@@ -130,7 +136,7 @@ def prediction_page():
 
     st.title("🩺 Diabetes Risk Predictor")
 
-    st.write(f"Logged in as: **{st.session_state.doctor}**")
+    st.write(f"Logged in as **{st.session_state.doctor}**")
 
     if st.button("Logout"):
         st.session_state.logged_in = False
@@ -151,7 +157,7 @@ def prediction_page():
 
     bmi = st.number_input("BMI", 10.0, 70.0, 25.0)
     age = st.number_input("Age", 1, 120, 30)
-    genhlth = st.slider("General Health (1=Excellent,5=Poor)", 1, 5, 3)
+    genhlth = st.slider("General Health", 1, 5, 3)
     physhlth = st.slider("Physical Health Days", 0, 30, 0)
 
     highbp = st.selectbox("High Blood Pressure", [0,1])
@@ -161,6 +167,7 @@ def prediction_page():
     diffwalk = st.selectbox("Difficulty Walking", [0,1])
     smoker = st.selectbox("Smoker", [0,1])
 
+
     if st.button("Predict Diabetes Risk"):
 
         if patient_name == "" or patient_id == "":
@@ -169,7 +176,9 @@ def prediction_page():
 
         try:
 
-            # CREATE FEATURE ARRAY
+            # -----------------------------
+            # CREATE INPUT ARRAY
+            # -----------------------------
             features = np.array([
                 bmi, age, genhlth, physhlth,
                 highbp, highchol, physactivity,
@@ -182,17 +191,33 @@ def prediction_page():
             # SCALE FEATURES
             scaled = scaler.transform(features)
 
+            # -----------------------------
+            # ENCODER STEP
+            # -----------------------------
+            encoded = encoder.predict(scaled)
+
+            # FIX SHAPE IF NEEDED
+            encoded = np.array(encoded)
+
+            if len(encoded.shape) == 1:
+                encoded = encoded.reshape(1,-1)
+
+            # -----------------------------
             # MODEL PREDICTION
-            prediction = model.predict(scaled)
+            # -----------------------------
+            prediction = model.predict(encoded)
 
             risk_score = float(prediction[0][0])
 
             st.subheader("Prediction Result")
 
+            st.write("Risk Score:", risk_score)
+
             if risk_score > 0.5:
                 st.error(f"⚠️ High Diabetes Risk ({risk_score*100:.2f}%)")
             else:
                 st.success(f"✅ Low Diabetes Risk ({risk_score*100:.2f}%)")
+
 
             # SAVE TO DATABASE
             db_data = (
@@ -210,6 +235,7 @@ def prediction_page():
 
         except Exception as e:
             st.error(f"Prediction Error: {e}")
+
 
     st.divider()
 
@@ -237,7 +263,7 @@ def prediction_page():
 
 
 # -----------------------------
-# APP ROUTER
+# ROUTER
 # -----------------------------
 if st.session_state.logged_in:
     prediction_page()
