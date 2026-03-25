@@ -14,7 +14,7 @@ def get_connection():
         host="localhost",
         database="diabetes_app",
         user="postgres",
-        password="38744474"  # change for deployment
+        password="38744474"  # change in deployment
     )
 
 # -----------------------------
@@ -68,12 +68,12 @@ def fetch_predictions():
         return []
 
 # -----------------------------
-# LOAD MODEL + SCALER ONLY
+# LOAD MODEL + SCALER
 # -----------------------------
 @st.cache_resource
 def load_artifacts():
     try:
-        model = load_model("diabetes_full_model.keras")  # expects 10 features
+        model = load_model("diabetes_full_model.keras")
         scaler = joblib.load("scaler.pkl")
         return model, scaler
     except Exception as e:
@@ -121,7 +121,9 @@ def prediction_page():
 
     st.divider()
 
-    # Patient Info
+    # -----------------------------
+    # PATIENT INFO
+    # -----------------------------
     st.subheader("📋 Patient Information")
     patient_name = st.text_input("Patient Full Name")
     patient_id = st.text_input("Patient ID")
@@ -130,7 +132,9 @@ def prediction_page():
     st.write(f"Date: **{current_date}**")
     st.divider()
 
-    # Health Inputs
+    # -----------------------------
+    # HEALTH INPUTS
+    # -----------------------------
     st.subheader("🧾 Health Data")
 
     features = [
@@ -158,7 +162,7 @@ def prediction_page():
             inputs.append(val)
 
     # -----------------------------
-    # PREDICTION (FIXED)
+    # PREDICTION (FIXED PROPERLY)
     # -----------------------------
     if st.button("Predict Diabetes Risk"):
 
@@ -167,19 +171,26 @@ def prediction_page():
             return
 
         try:
-            data = np.array([inputs], dtype=float)
+            # Prepare input
+            data = np.array([inputs]).astype(np.float32)
 
-            # Scale ONLY
+            # Scale
             scaled = scaler.transform(data)
 
-            # Predict directly (NO ENCODER)
+            # Predict
             prediction = model.predict(scaled)
-
             risk_score = float(prediction[0][0])
 
             # -----------------------------
-            # DISPLAY RESULT
+            # DEBUG INFO (IMPORTANT)
             # -----------------------------
+            st.write("🔍 Risk Probability:", round(risk_score, 4))
+
+            # -----------------------------
+            # SMART THRESHOLD
+            # -----------------------------
+            threshold = 0.3   # tuned threshold
+
             st.divider()
             st.subheader("📊 Prediction Result")
 
@@ -187,14 +198,14 @@ def prediction_page():
             st.write(f"Patient ID: **{patient_id}**")
             st.write(f"Date: **{current_date}**")
 
-            if risk_score > 0.5:
+            if risk_score > threshold:
                 st.error(f"⚠️ High Diabetes Risk ({risk_score*100:.2f}%)")
             else:
                 st.success(f"✅ Low Diabetes Risk ({risk_score*100:.2f}%)")
 
             st.caption("This is an AI-assisted prediction, not a medical diagnosis.")
 
-            # Save to DB
+            # Save
             db_data = (
                 st.session_state.doctor,
                 patient_name,
