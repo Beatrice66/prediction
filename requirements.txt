@@ -1,8 +1,8 @@
-streamlit
-numpy
-pandas
-tensorflow
-scikit-learn
-joblib
-gdown
-psycopg2-binary
+streamlit==1.32.0
+numpy==1.26.4
+pandas==2.2.2
+tensorflow==2.13.0
+scikit-learn==1.3.2
+joblib==1.3.2
+gdown==5.1.0
+psycopg2-binary==2.9.9
