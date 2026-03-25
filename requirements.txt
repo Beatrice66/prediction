@@ -1,5 +1,8 @@
 streamlit
+psycopg2-binary
+pandas
 numpy
+scikit-learn
 tensorflow
-keras
-firebase-admin
+matplotlib
+seaborn
