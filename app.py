@@ -12,9 +12,9 @@ import pandas as pd
 def get_connection():
     # Connect to Supabase PostgreSQL using Streamlit secrets
     conn = psycopg2.connect(
-        host=st.secrets["DB_HOST"],
-        database=st.secrets["DB_NAME"],
-        user=st.secrets["DB_USER"],
+        host=st.secrets["db.pqjbkgrtbyzxqbkbxiir.supabase.co"],
+        database=st.secrets["postgres"],
+        user=st.secrets["postgres"],
         password=st.secrets["GMj4jYjVRFebRIwS"],
         port=5432
     )
