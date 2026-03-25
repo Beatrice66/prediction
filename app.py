@@ -10,13 +10,17 @@ import pandas as pd
 # DATABASE CONNECTION
 # -----------------------------
 def get_connection():
-    conn = psycopg2.connect(
-        host="localhost",
-        database="diabetes_app",
-        user="postgres",
-        password="38744474"  # <-- your PostgreSQL password
-    )
-    return conn
+    try:
+        conn = psycopg2.connect(
+            host="localhost",          # Change if online DB host is different
+            database="diabetes_app",
+            user="postgres",
+            password="38744474"        # Replace with secure method for online deployment
+        )
+        return conn
+    except Exception as e:
+        st.error(f"Database connection error: {e}")
+        st.stop()
 
 # -----------------------------
 # SAVE PREDICTION TO DATABASE
@@ -65,20 +69,19 @@ def fetch_predictions():
         return []
 
 # -----------------------------
-# Load models
+# Load model and scaler
 # -----------------------------
 @st.cache_resource
 def load_artifacts():
     try:
         model = load_model("diabetes_full_model.keras")
-        encoder = load_model("encoder_model.keras")
         scaler = joblib.load("scaler.pkl")
-        return model, encoder, scaler
+        return model, scaler
     except Exception as e:
         st.error(f"Error loading files: {e}")
-        return None, None, None
+        return None, None
 
-model, encoder, scaler = load_artifacts()
+model, scaler = load_artifacts()
 if model is None:
     st.stop()
 
@@ -153,10 +156,12 @@ def prediction_page():
             st.warning("Please enter patient name and ID")
             return
         try:
+            # Scale input
             data = np.array([inputs], dtype=float)
             scaled = scaler.transform(data)
-            encoded = encoder.predict(scaled)
-            prediction = model.predict(encoded)
+            
+            # Predict directly (encoder removed)
+            prediction = model.predict(scaled)
             risk_score = float(prediction[0][0])
             
             st.divider()
