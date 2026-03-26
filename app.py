@@ -1,78 +1,67 @@
 # app.py
 import streamlit as st
 import numpy as np
-from tensorflow.keras.models import load_model
-import pandas as pd
+from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.layers import Dense, Input
 
 # -----------------------------
-# LOAD MODELS
+# Model Definition (Keras 3)
 # -----------------------------
-@st.cache_resource  # caches the model for faster reloads
+def build_model():
+    model = Sequential([
+        Input(shape=(8,)),          # 8 features (adjust if your dataset has different)
+        Dense(16, activation='relu'),
+        Dense(8, activation='relu'),
+        Dense(1, activation='sigmoid')
+    ])
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    return model
+
+# -----------------------------
+# Load or create model
+# -----------------------------
+@st.cache_resource
 def load_classifier():
-    """
-    Load the updated Keras 3 model without deprecated batch_shape issues.
-    Make sure the model was saved using Keras 3:
+    try:
+        # Try to load existing Keras 3 model
+        model = load_model("diabetes_classifier_new.keras", compile=False)
+    except Exception:
+        # If fails (e.g., first time), build a new one
+        model = build_model()
+        # Save it for future use
         model.save("diabetes_classifier_new.keras")
-    """
-    model = load_model("diabetes_classifier_new.keras", compile=False)
     return model
 
 classifier = load_classifier()
 
 # -----------------------------
-# PAGE TITLE
+# Streamlit UI
 # -----------------------------
-st.title("Diabetes Risk Prediction")
+st.title("Diabetes Prediction App (Keras 3 Compatible)")
 
-# -----------------------------
-# USER INPUTS
-# -----------------------------
-st.sidebar.header("Input Patient Data")
+st.write("Enter patient details:")
 
-def user_input_features():
-    pregnancies = st.sidebar.number_input("Pregnancies", min_value=0, max_value=20, value=0)
-    glucose = st.sidebar.number_input("Glucose Level", min_value=0, max_value=300, value=120)
-    blood_pressure = st.sidebar.number_input("Blood Pressure", min_value=0, max_value=200, value=70)
-    skin_thickness = st.sidebar.number_input("Skin Thickness", min_value=0, max_value=100, value=20)
-    insulin = st.sidebar.number_input("Insulin", min_value=0, max_value=900, value=79)
-    bmi = st.sidebar.number_input("BMI", min_value=0.0, max_value=70.0, value=25.0)
-    dpf = st.sidebar.number_input("Diabetes Pedigree Function", min_value=0.0, max_value=3.0, value=0.5)
-    age = st.sidebar.number_input("Age", min_value=0, max_value=120, value=30)
+# Example features (adjust names as per your dataset)
+feature_names = [
+    "Pregnancies", "Glucose", "BloodPressure", "SkinThickness",
+    "Insulin", "BMI", "DiabetesPedigreeFunction", "Age"
+]
 
-    data = {
-        "Pregnancies": pregnancies,
-        "Glucose": glucose,
-        "BloodPressure": blood_pressure,
-        "SkinThickness": skin_thickness,
-        "Insulin": insulin,
-        "BMI": bmi,
-        "DiabetesPedigreeFunction": dpf,
-        "Age": age
-    }
-    features = pd.DataFrame(data, index=[0])
-    return features
+# Input fields
+inputs = []
+for feature in feature_names:
+    value = st.number_input(f"{feature}", min_value=0.0, max_value=500.0, value=0.0, step=0.1)
+    inputs.append(value)
 
-input_df = user_input_features()
+# Prediction button
+if st.button("Predict Diabetes Risk"):
+    data = np.array([inputs], dtype=np.float32)
+    prediction = classifier.predict(data)[0][0]
+    risk_percent = prediction * 100
 
-# -----------------------------
-# PREDICTION
-# -----------------------------
-st.subheader("Patient Data")
-st.write(input_df)
-
-# Convert dataframe to numpy array for the model
-input_array = input_df.to_numpy()
-
-prediction = classifier.predict(input_array)
-risk_percentage = prediction[0][0] * 100  # assuming output is a single sigmoid neuron
-
-# -----------------------------
-# DISPLAY RESULT
-# -----------------------------
-st.subheader("Diabetes Risk Prediction")
-if risk_percentage < 20:
-    st.success(f"✅ Low Diabetes Risk ({risk_percentage:.2f}%)")
-elif risk_percentage < 50:
-    st.warning(f"⚠️ Moderate Diabetes Risk ({risk_percentage:.2f}%)")
-else:
-    st.error(f"❌ High Diabetes Risk ({risk_percentage:.2f}%)")
+    if risk_percent < 30:
+        st.success(f"✅ Low Diabetes Risk ({risk_percent:.2f}%)")
+    elif risk_percent < 70:
+        st.warning(f"⚠️ Medium Diabetes Risk ({risk_percent:.2f}%)")
+    else:
+        st.error(f"❌ High Diabetes Risk ({risk_percent:.2f}%)")
