@@ -7,6 +7,14 @@ from tensorflow.keras.models import load_model
 from datetime import datetime
 import os
 
+
+# =====================================
+# DEBUG: SHOW FILES IN DEPLOYMENT
+# =====================================
+
+st.write("Files in directory:", os.listdir())
+
+
 # =====================================
 # DATABASE CONNECTION
 # =====================================
@@ -30,21 +38,24 @@ def get_connection():
 def load_models():
 
     try:
-        scaler = joblib.load("scaler.pkl")
-    except:
-        st.error("Scaler file not found or incompatible")
+        scaler = joblib.load("scaler_fixed.pkl")
+        st.success("Scaler loaded successfully")
+    except Exception as e:
+        st.error(f"Scaler failed to load: {e}")
         scaler = None
 
     try:
         encoder = load_model("encoder_model.keras", compile=False)
-    except:
-        st.error("Encoder model could not be loaded")
+        st.success("Encoder loaded successfully")
+    except Exception as e:
+        st.error(f"Encoder failed to load: {e}")
         encoder = None
 
     try:
-        classifier = load_model("diabetes_classifier.keras", compile=False)
-    except:
-        st.error("Classifier model could not be loaded")
+        classifier = load_model("diabetes_classifier_fixed.keras", compile=False)
+        st.success("Classifier loaded successfully")
+    except Exception as e:
+        st.error(f"Classifier failed to load: {e}")
         classifier = None
 
     return scaler, encoder, classifier
@@ -52,12 +63,14 @@ def load_models():
 
 scaler, encoder, classifier = load_models()
 
+
 # =====================================
 # PAGE TITLE
 # =====================================
 
 st.title("Diabetes Risk Prediction")
 st.write("Enter patient information below to predict diabetes risk.")
+
 
 # =====================================
 # INPUT FORM
@@ -116,7 +129,9 @@ with st.form("prediction_form"):
 if submitted:
 
     if scaler is None or encoder is None or classifier is None:
-        st.error("Model files are missing. Please check deployment.")
+
+        st.error("Model files are missing or failed to load.")
+
     else:
 
         try:
@@ -203,7 +218,6 @@ if submitted:
             conn.commit()
 
             cur.close()
-
             conn.close()
 
             st.success("Prediction saved successfully")
@@ -240,6 +254,6 @@ try:
 
         st.write("No predictions yet.")
 
-except:
+except Exception as e:
 
-    st.warning("Database not connected.")
+    st.warning(f"Database connection issue: {e}")
