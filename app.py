@@ -1,146 +1,124 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-from datetime import datetime
-import os
 import psycopg2
+import joblib
 from tensorflow.keras.models import load_model
-from sklearn.preprocessing import StandardScaler
+from datetime import datetime
 
-# -----------------------------
+
+# -------------------------
 # DATABASE CONNECTION
-# -----------------------------
+# -------------------------
 def get_connection():
-    try:
-        conn = psycopg2.connect(
-            host=os.getenv("DB_HOST"),
-            database=os.getenv("DB_NAME"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            port=os.getenv("DB_PORT", "5432")
-        )
-        return conn
-    except Exception as e:
-        st.error(f"Database Connection Error: {e}")
-        return None
+    return psycopg2.connect(
+        host=st.secrets["DB_HOST"],
+        database=st.secrets["DB_NAME"],
+        user=st.secrets["DB_USER"],
+        password=st.secrets["DB_PASSWORD"],
+        port=5432
+    )
 
-# -----------------------------
+
+# -------------------------
 # SAVE PREDICTION
-# -----------------------------
+# -------------------------
 def save_prediction(data):
-    conn = get_connection()
-    if conn is None:
-        return
     try:
+        conn = get_connection()
         cur = conn.cursor()
+
         cur.execute("""
         INSERT INTO predictions(
-            doctor_name, patient_name, patient_id,
-            bmi, age, genhlth, physhlth,
-            highbp, highchol, physactivity,
-            heartdiseaseorattack, diffwalk, smoker,
-            risk_score, prediction_date
-        )
+        doctor_name, patient_name, patient_id,
+        bmi, age, genhlth, physhlth,
+        highbp, highchol, physactivity,
+        heartdiseaseorattack, diffwalk, smoker,
+        risk_score, prediction_date)
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, data)
+
         conn.commit()
         cur.close()
         conn.close()
+
     except Exception as e:
         st.error(f"Database Error: {e}")
 
-# -----------------------------
-# FETCH HISTORY
-# -----------------------------
-def fetch_predictions():
-    conn = get_connection()
-    if conn is None:
-        return []
+
+# -------------------------
+# LOAD HISTORY
+# -------------------------
+def load_history():
     try:
+        conn = get_connection()
         cur = conn.cursor()
-        cur.execute("""
-            SELECT doctor_name, patient_name, patient_id, bmi, age, genhlth, physhlth,
-                   highbp, highchol, physactivity, heartdiseaseorattack, diffwalk, smoker,
-                   risk_score, prediction_date
-            FROM predictions
-            ORDER BY prediction_date DESC
-        """)
+
+        cur.execute("SELECT * FROM predictions ORDER BY prediction_date DESC")
+
         rows = cur.fetchall()
+
         cur.close()
         conn.close()
+
         return rows
+
     except Exception as e:
-        st.error(f"Fetch Error: {e}")
+        st.error(e)
         return []
 
-# -----------------------------
-# CREATE SCALER (NO FILE NEEDED)
-# -----------------------------
-def create_scaler():
-    scaler = StandardScaler()
 
-    # Dummy data approximating training distribution
-    dummy_data = np.array([
-        [25, 30, 3, 5, 1, 1, 1, 0, 0, 0],
-        [30, 40, 2, 10, 1, 1, 0, 1, 1, 1],
-        [28, 50, 4, 15, 0, 1, 1, 0, 1, 0],
-        [35, 60, 5, 20, 1, 1, 0, 1, 1, 1]
-    ])
-
-    scaler.fit(dummy_data)
-    return scaler
-
-# -----------------------------
-# LOAD MODELS
-# -----------------------------
+# -------------------------
+# LOAD MODEL FILES
+# -------------------------
 @st.cache_resource
-def load_pipeline():
-    try:
-        scaler = create_scaler()
+def load_models():
 
-        encoder = load_model("encoder_model.keras")
-        model = load_model("diabetes_full_model.keras")
+    model = load_model("diabetes_full_model.keras")
+    encoder = load_model("encoder_model.keras")
+    scaler = joblib.load("scaler.pkl")
 
-        return scaler, encoder, model
+    return model, encoder, scaler
 
-    except Exception as e:
-        st.error(f"Model Loading Error: {e}")
-        return None, None, None
 
-# -----------------------------
-# SESSION STATE
-# -----------------------------
+model, encoder, scaler = load_models()
+
+
+# -------------------------
+# LOGIN SESSION
+# -------------------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-# -----------------------------
+
+# -------------------------
 # LOGIN PAGE
-# -----------------------------
-def login_page():
-    st.title("🔐 Doctor Login")
-    doctor_name = st.text_input("Doctor Full Name")
-    password = st.text_input("Password", type="password")
+# -------------------------
+def login():
+
+    st.title("Doctor Login")
+
+    doctor = st.text_input("Doctor Name")
 
     if st.button("Login"):
-        if doctor_name.strip() == "":
-            st.warning("Please enter your name")
+
+        if doctor == "":
+            st.warning("Enter doctor name")
+
         else:
             st.session_state.logged_in = True
-            st.session_state.doctor = doctor_name
+            st.session_state.doctor = doctor
             st.rerun()
 
-# -----------------------------
+
+# -------------------------
 # MAIN APP
-# -----------------------------
-def prediction_page():
-    st.title("🩺 Diabetes Risk Predictor")
+# -------------------------
+def app():
 
-    scaler, encoder, model = load_pipeline()
+    st.title("Diabetes Risk Prediction")
 
-    if model is None:
-        st.stop()
-
-    st.write(f"👨‍⚕️ Logged in as: **{st.session_state.doctor}**")
+    st.write("Logged in as:", st.session_state.doctor)
 
     if st.button("Logout"):
         st.session_state.logged_in = False
@@ -148,105 +126,128 @@ def prediction_page():
 
     st.divider()
 
-    # Patient Info
-    st.subheader("📋 Patient Information")
-    patient_name = st.text_input("Patient Full Name")
-    patient_id = st.text_input("Patient ID")
-    current_date = datetime.now()
+    st.subheader("Patient Details")
 
-    st.write(f"Date: **{current_date.strftime('%Y-%m-%d')}**")
+    patient_name = st.text_input("Patient Name")
+    patient_id = st.text_input("Patient ID")
+
     st.divider()
 
-    # Inputs
-    st.subheader("🧾 Health Data")
+    st.subheader("Health Inputs")
 
-    features = [
-        "BMI","Age","GenHlth","PhysHlth","HighBP",
-        "HighChol","PhysActivity","HeartDiseaseorAttack",
-        "DiffWalk","Smoker"
-    ]
+    bmi = st.number_input("BMI", 10.0, 70.0, 25.0)
+    age = st.number_input("Age", 1, 120, 30)
 
-    inputs = []
-    col1, col2 = st.columns(2)
+    genhlth = st.slider("General Health", 1, 5, 3)
+    physhlth = st.slider("Physical Health Days", 0, 30, 0)
 
-    for i, feature in enumerate(features):
-        with (col1 if i % 2 == 0 else col2):
-            if feature == "BMI":
-                val = st.number_input(feature, 10.0, 70.0, 25.0)
-            elif feature == "Age":
-                val = st.number_input(feature, 1, 120, 30)
-            elif feature == "GenHlth":
-                val = st.slider(feature, 1, 5, 3)
-            elif feature == "PhysHlth":
-                val = st.slider(feature, 0, 30, 0)
-            else:
-                val = st.selectbox(feature, [0,1],
-                                   format_func=lambda x: "Yes" if x==1 else "No")
-            inputs.append(val)
+    highbp = st.selectbox("High Blood Pressure", [0,1])
+    highchol = st.selectbox("High Cholesterol", [0,1])
+    physactivity = st.selectbox("Physical Activity", [0,1])
+    heartdisease = st.selectbox("Heart Disease", [0,1])
+    diffwalk = st.selectbox("Difficulty Walking", [0,1])
+    smoker = st.selectbox("Smoker", [0,1])
 
-    # Prediction
+
     if st.button("Predict Diabetes Risk"):
 
-        if patient_name == "" or patient_id == "":
-            st.warning("Please enter patient details")
-            return
-
         try:
-            data = np.array([inputs], dtype=float)
 
-            # Pipeline
-            data_scaled = scaler.transform(data)
-            data_encoded = encoder.predict(data_scaled)
-            prediction = model.predict(data_encoded)
+            # -------------------------
+            # CREATE INPUT ARRAY
+            # -------------------------
+            features = np.array([
+                bmi, age, genhlth, physhlth,
+                highbp, highchol, physactivity,
+                heartdisease, diffwalk, smoker
+            ], dtype=float)
+
+            features = features.reshape(1,10)
+
+            # -------------------------
+            # SCALE
+            # -------------------------
+            scaled = scaler.transform(features)
+
+            # -------------------------
+            # ENCODER
+            # -------------------------
+            encoded = encoder.predict(scaled)
+
+            encoded = np.array(encoded)
+
+            # -------------------------
+            # SHAPE FIX
+            # -------------------------
+            if encoded.shape[1] != 10:
+
+                # expand to required size
+                fixed = np.zeros((1,10))
+                length = min(encoded.shape[1],10)
+
+                fixed[0,:length] = encoded[0,:length]
+
+                encoded = fixed
+
+            # -------------------------
+            # MODEL PREDICTION
+            # -------------------------
+            prediction = model.predict(encoded)
 
             risk_score = float(prediction[0][0])
 
-            st.divider()
-            st.subheader("📊 Prediction Result")
+            st.subheader("Prediction Result")
+
+            st.write("Risk Score:", risk_score)
 
             if risk_score > 0.5:
-                st.error(f"⚠️ High Diabetes Risk ({risk_score*100:.2f}%)")
+                st.error(f"High Risk ({risk_score*100:.2f}%)")
             else:
-                st.success(f"✅ Low Diabetes Risk ({risk_score*100:.2f}%)")
+                st.success(f"Low Risk ({risk_score*100:.2f}%)")
 
-            st.caption("⚠️ AI-assisted prediction — not a medical diagnosis")
 
-            db_data = (
+            # -------------------------
+            # SAVE TO DATABASE
+            # -------------------------
+            data = (
                 st.session_state.doctor,
                 patient_name,
                 patient_id,
-                *inputs,
+                bmi, age, genhlth, physhlth,
+                highbp, highchol, physactivity,
+                heartdisease, diffwalk, smoker,
                 risk_score,
-                current_date
+                datetime.now().strftime("%Y-%m-%d")
             )
 
-            save_prediction(db_data)
+            save_prediction(data)
 
         except Exception as e:
             st.error(f"Prediction Error: {e}")
 
-    # History
+
     st.divider()
-    st.subheader("📂 Prediction History")
 
-    if st.button("Load Prediction History"):
-        data = fetch_predictions()
+    st.subheader("Prediction History")
 
-        if data:
-            df = pd.DataFrame(data, columns=[
-                "Doctor","Patient","ID","BMI","Age","GenHlth",
-                "PhysHlth","HighBP","HighChol","PhysActivity",
-                "HeartDisease","DiffWalk","Smoker","Risk","Date"
-            ])
-            df["Risk"] = df["Risk"].apply(lambda x: f"{x*100:.2f}%")
+    if st.button("Load History"):
+
+        rows = load_history()
+
+        if rows:
+
+            df = pd.DataFrame(rows)
+
             st.dataframe(df)
-        else:
-            st.info("No predictions found.")
 
-# -----------------------------
-# APP CONTROL
-# -----------------------------
+        else:
+            st.info("No predictions yet")
+
+
+# -------------------------
+# ROUTER
+# -------------------------
 if st.session_state.logged_in:
-    prediction_page()
+    app()
 else:
-    login_page()
+    login()
