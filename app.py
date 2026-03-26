@@ -1,242 +1,98 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import psycopg2
 import joblib
 from tensorflow.keras.models import load_model
-from datetime import datetime
+import tensorflow as tf
 
-
-# -----------------------------
-# DATABASE CONNECTION
-# -----------------------------
-def get_connection():
-    return psycopg2.connect(
-        host=st.secrets["DB_HOST"],
-        database=st.secrets["DB_NAME"],
-        user=st.secrets["DB_USER"],
-        password=st.secrets["DB_PASSWORD"],
-        port=5432
-    )
-
+st.title("Diabetes Risk Prediction")
 
 # -----------------------------
-# SAVE PREDICTION
-# -----------------------------
-def save_prediction(data):
-    try:
-        conn = get_connection()
-        cur = conn.cursor()
-
-        cur.execute("""
-        INSERT INTO predictions(
-            doctor_name, patient_name, patient_id,
-            bmi, age, genhlth, physhlth,
-            highbp, highchol, physactivity,
-            heartdiseaseorattack, diffwalk, smoker,
-            risk_score, prediction_date
-        )
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        """, data)
-
-        conn.commit()
-        cur.close()
-        conn.close()
-
-    except Exception as e:
-        st.error(f"Database Error: {e}")
-
-
-# -----------------------------
-# LOAD HISTORY
-# -----------------------------
-def load_history():
-    try:
-        conn = get_connection()
-        cur = conn.cursor()
-
-        cur.execute("SELECT * FROM predictions ORDER BY prediction_date DESC")
-
-        rows = cur.fetchall()
-
-        cur.close()
-        conn.close()
-
-        return rows
-
-    except Exception as e:
-        st.error(e)
-        return []
-
-
-# -----------------------------
-# LOAD MODELS
+# Load Models
 # -----------------------------
 @st.cache_resource
 def load_models():
-    try:
-        # IMPORTANT FIX
-        model = load_model("diabetes_full_model.keras", compile=False)
-        encoder = load_model("encoder_model.keras", compile=False)
 
-        scaler = joblib.load("scaler.pkl")
+    # load keras model safely
+    model = load_model("diabetes_full_model.keras", compile=False)
 
-        return model, encoder, scaler
+    # load encoder + scaler
+    encoder = joblib.load("encoder.pkl")
+    scaler = joblib.load("scaler.pkl")
 
-    except Exception as e:
-        st.error(f"Model loading failed: {e}")
-        return None, None, None
+    return model, encoder, scaler
 
 
 model, encoder, scaler = load_models()
 
-if model is None:
-    st.stop()
+
+# -----------------------------
+# User Inputs
+# -----------------------------
+age = st.number_input("Age", 1, 120, 30)
+bmi = st.number_input("BMI", 10.0, 60.0, 25.0)
+glucose = st.number_input("Glucose Level", 50, 300, 100)
+blood_pressure = st.number_input("Blood Pressure", 40, 200, 80)
+insulin = st.number_input("Insulin", 0, 900, 80)
+skin_thickness = st.number_input("Skin Thickness", 0, 100, 20)
+
+pregnancies = st.number_input("Pregnancies", 0, 20, 1)
+
+gender = st.selectbox("Gender", ["Male", "Female"])
+smoking = st.selectbox("Smoking", ["Yes", "No"])
+family_history = st.selectbox("Family History", ["Yes", "No"])
 
 
 # -----------------------------
-# SESSION STATE
+# Prediction
 # -----------------------------
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
+if st.button("Predict"):
 
+    try:
 
-# -----------------------------
-# LOGIN PAGE
-# -----------------------------
-def login():
+        # categorical dataframe
+        cat_df = pd.DataFrame({
+            "Gender":[gender],
+            "Smoking":[smoking],
+            "FamilyHistory":[family_history]
+        })
 
-    st.title("Doctor Login")
+        # encode categorical
+        encoded = encoder.transform(cat_df)
 
-    doctor = st.text_input("Doctor Name")
+        # numeric features
+        num_features = np.array([[
 
-    if st.button("Login"):
+            age,
+            bmi,
+            glucose,
+            blood_pressure,
+            insulin,
+            skin_thickness,
+            pregnancies
 
-        if doctor.strip() == "":
-            st.warning("Enter doctor name")
+        ]])
+
+        # scale numeric
+        num_scaled = scaler.transform(num_features)
+
+        # combine
+        final_input = np.concatenate([num_scaled, encoded], axis=1)
+
+        # ensure correct shape
+        final_input = final_input.reshape(1,10)
+
+        # prediction
+        prediction = model.predict(final_input)
+
+        prob = float(prediction[0][0])
+
+        st.write("Prediction Probability:", prob)
+
+        if prob > 0.5:
+            st.error("High Risk of Diabetes")
         else:
-            st.session_state.logged_in = True
-            st.session_state.doctor = doctor
-            st.rerun()
+            st.success("Low Risk of Diabetes")
 
-
-# -----------------------------
-# MAIN APP
-# -----------------------------
-def app():
-
-    st.title("Diabetes Risk Predictor")
-
-    st.write("Logged in as:", st.session_state.doctor)
-
-    if st.button("Logout"):
-        st.session_state.logged_in = False
-        st.rerun()
-
-    st.divider()
-
-    st.subheader("Patient Details")
-
-    patient_name = st.text_input("Patient Name")
-    patient_id = st.text_input("Patient ID")
-
-    st.divider()
-
-    st.subheader("Health Inputs")
-
-    bmi = st.number_input("BMI", 10.0, 70.0, 25.0)
-    age = st.number_input("Age", 1, 120, 30)
-
-    genhlth = st.slider("General Health", 1, 5, 3)
-    physhlth = st.slider("Physical Health Days", 0, 30, 0)
-
-    highbp = st.selectbox("High Blood Pressure", [0,1])
-    highchol = st.selectbox("High Cholesterol", [0,1])
-    physactivity = st.selectbox("Physical Activity", [0,1])
-    heartdisease = st.selectbox("Heart Disease", [0,1])
-    diffwalk = st.selectbox("Difficulty Walking", [0,1])
-    smoker = st.selectbox("Smoker", [0,1])
-
-
-    if st.button("Predict Diabetes Risk"):
-
-        try:
-
-            features = np.array([
-                bmi, age, genhlth, physhlth,
-                highbp, highchol, physactivity,
-                heartdisease, diffwalk, smoker
-            ], dtype=float)
-
-            features = features.reshape(1,10)
-
-            # SCALE
-            scaled = scaler.transform(features)
-
-            # ENCODER
-            encoded = encoder.predict(scaled)
-
-            encoded = np.array(encoded)
-
-            # SHAPE FIX
-            if encoded.shape[1] != 10:
-
-                fixed = np.zeros((1,10))
-
-                length = min(encoded.shape[1],10)
-
-                fixed[0,:length] = encoded[0,:length]
-
-                encoded = fixed
-
-            # MODEL PREDICTION
-            prediction = model.predict(encoded)
-
-            risk_score = float(prediction[0][0])
-
-            st.subheader("Prediction Result")
-
-            if risk_score > 0.5:
-                st.error(f"High Risk ({risk_score*100:.2f}%)")
-            else:
-                st.success(f"Low Risk ({risk_score*100:.2f}%)")
-
-            data = (
-                st.session_state.doctor,
-                patient_name,
-                patient_id,
-                bmi, age, genhlth, physhlth,
-                highbp, highchol, physactivity,
-                heartdisease, diffwalk, smoker,
-                risk_score,
-                datetime.now().strftime("%Y-%m-%d")
-            )
-
-            save_prediction(data)
-
-        except Exception as e:
-            st.error(f"Prediction Error: {e}")
-
-
-    st.divider()
-
-    st.subheader("Prediction History")
-
-    if st.button("Load History"):
-
-        rows = load_history()
-
-        if rows:
-            df = pd.DataFrame(rows)
-            st.dataframe(df)
-        else:
-            st.info("No records yet")
-
-
-# -----------------------------
-# ROUTER
-# -----------------------------
-if st.session_state.logged_in:
-    app()
-else:
-    login()
+    except Exception as e:
+        st.error(f"Prediction Error: {e}")
