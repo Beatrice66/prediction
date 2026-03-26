@@ -1,29 +1,20 @@
+# app.py
 import streamlit as st
 import numpy as np
-import pandas as pd
 from tensorflow.keras.models import load_model
-from datetime import datetime
-import psycopg2
+import pandas as pd
 
 # -----------------------------
-# DATABASE CONNECTION
+# LOAD MODELS
 # -----------------------------
-def get_connection():
-    conn = psycopg2.connect(
-        host=st.secrets["DB_HOST"],
-        database=st.secrets["DB_NAME"],
-        user=st.secrets["DB_USER"],
-        password=st.secrets["DB_PASSWORD"],
-        port="5432"
-    )
-    return conn
-
-# -----------------------------
-# LOAD MODEL
-# -----------------------------
-@st.cache_resource
+@st.cache_resource  # caches the model for faster reloads
 def load_classifier():
-    model = load_model("diabetes_classifier_fixed.keras", compile=False)
+    """
+    Load the updated Keras 3 model without deprecated batch_shape issues.
+    Make sure the model was saved using Keras 3:
+        model.save("diabetes_classifier_new.keras")
+    """
+    model = load_model("diabetes_classifier_new.keras", compile=False)
     return model
 
 classifier = load_classifier()
@@ -32,79 +23,56 @@ classifier = load_classifier()
 # PAGE TITLE
 # -----------------------------
 st.title("Diabetes Risk Prediction")
-st.write("Enter patient information below to predict diabetes risk.")
 
 # -----------------------------
-# INPUT FORM
+# USER INPUTS
 # -----------------------------
-with st.form("prediction_form"):
-    BMI = st.number_input("BMI", 10.0, 60.0, 25.0)
-    Age = st.number_input("Age", 18, 100, 40)
-    GenHlth = st.selectbox("General Health", [1, 2, 3, 4, 5], help="1=Excellent 5=Poor")
-    PhysHlth = st.number_input("Physical Health (days unhealthy last month)", 0, 30, 0)
-    HighBP = st.selectbox("High Blood Pressure", [0, 1])
-    HighChol = st.selectbox("High Cholesterol", [0, 1])
-    PhysActivity = st.selectbox("Physical Activity (last 30 days)", [0, 1])
-    HeartDiseaseorAttack = st.selectbox("Heart Disease or Attack", [0, 1])
-    DiffWalk = st.selectbox("Difficulty Walking", [0, 1])
-    Smoker = st.selectbox("Smoker", [0, 1])
-    submitted = st.form_submit_button("Predict")
+st.sidebar.header("Input Patient Data")
+
+def user_input_features():
+    pregnancies = st.sidebar.number_input("Pregnancies", min_value=0, max_value=20, value=0)
+    glucose = st.sidebar.number_input("Glucose Level", min_value=0, max_value=300, value=120)
+    blood_pressure = st.sidebar.number_input("Blood Pressure", min_value=0, max_value=200, value=70)
+    skin_thickness = st.sidebar.number_input("Skin Thickness", min_value=0, max_value=100, value=20)
+    insulin = st.sidebar.number_input("Insulin", min_value=0, max_value=900, value=79)
+    bmi = st.sidebar.number_input("BMI", min_value=0.0, max_value=70.0, value=25.0)
+    dpf = st.sidebar.number_input("Diabetes Pedigree Function", min_value=0.0, max_value=3.0, value=0.5)
+    age = st.sidebar.number_input("Age", min_value=0, max_value=120, value=30)
+
+    data = {
+        "Pregnancies": pregnancies,
+        "Glucose": glucose,
+        "BloodPressure": blood_pressure,
+        "SkinThickness": skin_thickness,
+        "Insulin": insulin,
+        "BMI": bmi,
+        "DiabetesPedigreeFunction": dpf,
+        "Age": age
+    }
+    features = pd.DataFrame(data, index=[0])
+    return features
+
+input_df = user_input_features()
 
 # -----------------------------
 # PREDICTION
 # -----------------------------
-if submitted:
-    try:
-        # prepare input for model
-        input_data = np.array([[
-            BMI, Age, GenHlth, PhysHlth, HighBP, HighChol,
-            PhysActivity, HeartDiseaseorAttack, DiffWalk, Smoker
-        ]], dtype=np.float32)
+st.subheader("Patient Data")
+st.write(input_df)
 
-        prediction = classifier.predict(input_data)
-        probability = float(prediction[0][0])
-        risk = "High Risk" if probability > 0.5 else "Low Risk"
+# Convert dataframe to numpy array for the model
+input_array = input_df.to_numpy()
 
-        st.subheader("Prediction Result")
-        st.write(f"Risk Level: **{risk}**")
-        st.write(f"Probability: **{probability*100:.2f}%**")
-
-        # Save to database
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO predictions(
-                bmi, age, genhlth, physhlth, highbp, highchol,
-                physactivity, heartdiseaseorattack, diffwalk, smoker,
-                prediction, probability, created_at
-            )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        """, (
-            BMI, Age, GenHlth, PhysHlth, HighBP, HighChol,
-            PhysActivity, HeartDiseaseorAttack, DiffWalk, Smoker,
-            risk, probability, datetime.now()
-        ))
-        conn.commit()
-        cur.close()
-        conn.close()
-        st.success("Prediction saved successfully")
-
-    except Exception as e:
-        st.error(f"Prediction Error: {e}")
+prediction = classifier.predict(input_array)
+risk_percentage = prediction[0][0] * 100  # assuming output is a single sigmoid neuron
 
 # -----------------------------
-# DASHBOARD
+# DISPLAY RESULT
 # -----------------------------
-st.subheader("Prediction History")
-try:
-    conn = get_connection()
-    df = pd.read_sql("SELECT * FROM predictions ORDER BY created_at DESC LIMIT 50", conn)
-    conn.close()
-
-    if not df.empty:
-        st.dataframe(df)
-        st.bar_chart(df["prediction"].value_counts())
-    else:
-        st.write("No predictions yet.")
-except Exception:
-    st.warning("Database not connected.")
+st.subheader("Diabetes Risk Prediction")
+if risk_percentage < 20:
+    st.success(f"✅ Low Diabetes Risk ({risk_percentage:.2f}%)")
+elif risk_percentage < 50:
+    st.warning(f"⚠️ Moderate Diabetes Risk ({risk_percentage:.2f}%)")
+else:
+    st.error(f"❌ High Diabetes Risk ({risk_percentage:.2f}%)")
