@@ -28,7 +28,7 @@ def get_connection():
 def load_models():
     scaler = joblib.load("scaler.pkl")
     encoder = load_model("encoder_model.keras", compile=False)
-    classifier = load_model("diabetes_classifier.keras", compile=False)
+    classifier = load_model("diabetes_classifier_fixed.keras", compile=False)
     return scaler, encoder, classifier
 
 scaler, encoder, classifier = load_models()
