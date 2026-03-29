@@ -1,170 +1,164 @@
+import psycopg2
 import streamlit as st
 import numpy as np
-import pandas as pd
-import psycopg2
 import joblib
+import os
+import pandas as pd
 from tensorflow.keras.models import load_model
 from datetime import datetime
-import os
+from fpdf import FPDF
 
-
-# =====================================
-# DEBUG: SHOW FILES IN DEPLOYMENT
-# =====================================
-
-st.write("Files in directory:", os.listdir())
-
-
-# =====================================
-# DATABASE CONNECTION
-# =====================================
+# --- 1. SECURE CONFIG ---
+DB_CONFIG = {
+    "host": "localhost",
+    "database": "diabetes_app",
+    "user": "postgres",
+    "password": "38744474", 
+    "port": 5432
+}
 
 def get_connection():
-    conn = psycopg2.connect(
-        host=st.secrets["DB_HOST"],
-        database=st.secrets["DB_NAME"],
-        user=st.secrets["DB_USER"],
-        password=st.secrets["DB_PASSWORD"],
-        port="5432"
+    # Pass parameters explicitly to prevent 'no password supplied' errors
+    return psycopg2.connect(
+        host=DB_CONFIG["host"],
+        database=DB_CONFIG["database"],
+        user=DB_CONFIG["user"],
+        password=DB_CONFIG["password"],
+        port=DB_CONFIG["port"]
     )
-    return conn
 
+def save_prediction(data):
+    conn = None
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        # Ensure 17 %s placeholders match your table: doctor, p_name, p_id, p_phone, p_loc, 
+        # bmi, age, gh, ph, bp, chol, act, heart, walk, smoke, prob, date
+        query = """
+        INSERT INTO predictions(
+            doctor_name, patient_name, patient_id, patient_phone, patient_location,
+            bmi, age, genhlth, physhlth, highbp, highchol, 
+            physactivity, heartdiseaseorattack, diffwalk, smoker,
+            risk_score, prediction_date
+        )
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """
+        cur.execute(query, data)
+        conn.commit()
+        st.toast("✔️ Patient Data Synced to Hospital Registry")
+    except Exception as e:
+        st.error(f"❌ Database Flow Error: {e}")
+    finally:
+        if conn: conn.close()
 
-# =====================================
-# LOAD MODELS
-# =====================================
-
+# --- 2. AI ASSETS ---
 @st.cache_resource
-def load_models():
-
+def load_artifacts():
     try:
-        scaler = joblib.load("scaler_streamlit.pkl")
-        st.success("Scaler loaded successfully")
+        model = load_model("modeled(1).keras")
+        encoder = load_model("encodered_model.keras")
+        scaler = joblib.load("scaler(1).pkl")
+        return model, encoder, scaler
     except Exception as e:
-        st.error(f"Scaler failed to load: {e}")
-        scaler = None
+        st.error(f"❌ AI Assets Offline: {e}")
+        return None, None, None
 
-    try:
-        encoder = load_model("encoder_streamlit.keras", compile=False)
-        st.success("Encoder loaded successfully")
-    except Exception as e:
-        st.error(f"Encoder failed to load: {e}")
-        encoder = None
+model, encoder, scaler = load_artifacts()
 
-    try:
-        classifier = load_model("classifier_streamlit.keras", compile=False)
-        st.success("Classifier loaded successfully")
-    except Exception as e:
-        st.error(f"Classifier failed to load: {e}")
-        classifier = None
+# --- 3. PDF GENERATOR ---
+def generate_pdf(data):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 20)
+    pdf.cell(200, 15, "MEDVANTAGE HOSPITAL ASSESSMENT", ln=True, align='C')
+    pdf.set_font("Arial", '', 12)
+    pdf.ln(10)
+    pdf.cell(0, 10, f"Attending Physician: Dr. {data['doctor']}", ln=True)
+    pdf.cell(0, 10, f"Patient Name: {data['name']} (ID: {data['id']})", ln=True)
+    pdf.cell(0, 10, f"Contact: {data['phone']} | Location: {data['loc']}", ln=True)
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 14)
+    risk = "HIGH" if data['prob'] > 0.5 else "LOW"
+    pdf.cell(0, 10, f"DIABETES RISK: {risk} ({round(data['prob']*100, 2)}%)", ln=True)
+    return pdf.output(dest='S').encode('latin-1')
 
-    return scaler, encoder, classifier
+# --- 4. DASHBOARD UI ---
+def main_portal():
+    st.sidebar.title(f"👨‍⚕️ Dr. {st.session_state.doctor}")
+    page = st.sidebar.selectbox("Hospital Menu", ["Intake & Analysis", "Patient Registry"])
 
+    if page == "Intake & Analysis":
+        st.header("📋 New Patient Clinical Intake")
+        with st.container():
+            c1, c2 = st.columns(2)
+            p_name = c1.text_input("Full Name")
+            p_id = c2.text_input("National ID")
+            p_phone = c1.text_input("Phone Number")
+            p_loc = c2.text_input("Residential Area")
 
-scaler, encoder, classifier = load_models()
+        st.divider()
+        st.subheader("Clinical Vital Signs")
+        v1, v2 = st.columns(2)
+        with v1:
+            bmi = v1.number_input("BMI", 10.0, 70.0, 25.0)
+            age = v1.slider("Age Category", 1, 13, 5)
+            gh = v1.slider("Gen Health (1-5)", 1, 5, 2)
+            ph = v1.number_input("Days Physically Ill", 0, 30, 0)
+        with v2:
+            bp = v2.selectbox("High BP", [0,1], format_func=lambda x: "Yes" if x==1 else "No")
+            chol = v2.selectbox("High Chol", [0,1], format_func=lambda x: "Yes" if x==1 else "No")
+            act = v2.selectbox("Phys Activity", [0,1], format_func=lambda x: "Yes" if x==1 else "No")
+            heart = v2.selectbox("Heart Disease", [0,1], format_func=lambda x: "Yes" if x==1 else "No")
+            walk = v2.selectbox("Diff Walk", [0,1], format_func=lambda x: "Yes" if x==1 else "No")
+            smoke = v2.selectbox("Smoker", [0,1], format_func=lambda x: "Yes" if x==1 else "No")
 
+        if st.button("🚀 Analyze, Save & Generate Report", use_container_width=True):
+            if not p_name or not p_id:
+                st.warning("Identification fields are mandatory.")
+            else:
+                # 1. AI Logic
+                input_data = [bmi, age, gh, ph, bp, chol, act, heart, walk, smoke]
+                scaled = scaler.transform([input_data])
+                encoded = encoder.predict(scaled)
+                prob = float(model.predict(encoded)[0][0])
+                
+                # 2. UI Result
+                if prob > 0.5: st.error(f"HIGH RISK: {prob*100:.2f}%")
+                else: st.success(f"LOW RISK: {prob*100:.2f}%")
 
-# =====================================
-# PAGE TITLE
-# =====================================
+                # 3. DB Save
+                entry = (st.session_state.doctor, p_name, p_id, p_phone, p_loc,
+                         bmi, age, gh, ph, bp, chol, act, heart, walk, smoke, 
+                         prob, datetime.now().date())
+                save_prediction(entry)
 
-st.title("Diabetes Risk Prediction")
-st.write("Enter patient information below to predict diabetes risk.")
+                # 4. Report
+                pdf_data = {"doctor":st.session_state.doctor, "name":p_name, "id":p_id, "phone":p_phone, "loc":p_loc, "prob":prob}
+                pdf_bytes = generate_pdf(pdf_data)
+                st.download_button("📥 Download Official Patient Report", pdf_bytes, f"Report_{p_id}.pdf")
 
-
-# =====================================
-# INPUT FORM
-# =====================================
-
-with st.form("prediction_form"):
-
-    BMI = st.number_input("BMI", 10.0, 60.0, 25.0)
-    Age = st.number_input("Age", 18, 100, 40)
-    GenHlth = st.selectbox("General Health", [1, 2, 3, 4, 5], help="1=Excellent, 5=Poor")
-    PhysHlth = st.number_input("Physical Health (days unhealthy last month)", 0, 30, 0)
-    HighBP = st.selectbox("High Blood Pressure", [0, 1])
-    HighChol = st.selectbox("High Cholesterol", [0, 1])
-    PhysActivity = st.selectbox("Physical Activity (last 30 days)", [0, 1])
-    HeartDiseaseorAttack = st.selectbox("Heart Disease or Attack", [0, 1])
-    DiffWalk = st.selectbox("Difficulty Walking", [0, 1])
-    Smoker = st.selectbox("Smoker", [0, 1])
-
-    submitted = st.form_submit_button("Predict")
-
-
-# =====================================
-# PREDICTION
-# =====================================
-
-if submitted:
-
-    if scaler is None or encoder is None or classifier is None:
-        st.error("Model files are missing or failed to load.")
-    else:
+    elif page == "Patient Registry":
+        st.header("🗂️ Hospital Patient Registry")
+        q = st.text_input("🔎 Search by Name or ID")
         try:
-            input_data = np.array([[BMI, Age, GenHlth, PhysHlth, HighBP, HighChol,
-                                    PhysActivity, HeartDiseaseorAttack, DiffWalk, Smoker]])
-
-            # SCALE
-            scaled = scaler.transform(input_data)
-
-            # ENCODE
-            encoded = encoder.predict(scaled)
-
-            # CLASSIFY
-            prediction = classifier.predict(encoded)
-            probability = float(prediction[0][0])
-            risk = "High Risk" if probability > 0.5 else "Low Risk"
-
-            st.subheader("Prediction Result")
-            st.write(f"Risk Level: **{risk}**")
-            st.write(f"Probability: **{probability*100:.2f}%**")
-
-            # =====================================
-            # SAVE TO DATABASE
-            # =====================================
-
-            conn = get_connection()
-            cur = conn.cursor()
-
-            cur.execute(
-                """
-                INSERT INTO predictions(
-                    bmi, age, genhlth, physhlth, highbp, highchol, physactivity,
-                    heartdiseaseorattack, diffwalk, smoker, prediction, probability, created_at
-                )
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                """,
-                (BMI, Age, GenHlth, PhysHlth, HighBP, HighChol, PhysActivity,
-                 HeartDiseaseorAttack, DiffWalk, Smoker, risk, probability, datetime.now())
-            )
-
-            conn.commit()
-            cur.close()
-            conn.close()
-
-            st.success("Prediction saved successfully")
-
+            with get_connection() as conn:
+                df = pd.read_sql("SELECT * FROM predictions ORDER BY prediction_date DESC", conn)
+                if q:
+                    df = df[df['patient_name'].str.contains(q, case=False) | df['patient_id'].str.contains(q)]
+                st.dataframe(df[['patient_name', 'patient_id', 'patient_phone', 'patient_location', 'risk_score', 'prediction_date']], use_container_width=True)
         except Exception as e:
-            st.error(f"Prediction Error: {e}")
+            st.error(f"Registry Access Failed: {e}")
 
+# --- 5. AUTH & RUN ---
+if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
-# =====================================
-# DASHBOARD
-# =====================================
-
-st.subheader("Prediction History")
-
-try:
-    conn = get_connection()
-    df = pd.read_sql("SELECT * FROM predictions ORDER BY created_at DESC LIMIT 50", conn)
-    conn.close()
-
-    if not df.empty:
-        st.dataframe(df)
-        st.bar_chart(df["prediction"].value_counts())
-    else:
-        st.write("No predictions yet.")
-
-except Exception as e:
-    st.warning(f"Database connection issue: {e}")
+if st.session_state.logged_in:
+    main_portal()
+else:
+    st.title("🏥 MedVantage Login")
+    name = st.text_input("Physician Full Name")
+    if st.button("Access System"):
+        if name:
+            st.session_state.logged_in = True
+            st.session_state.doctor = name
+            st.rerun()
